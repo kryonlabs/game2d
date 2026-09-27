@@ -5,6 +5,12 @@ module holds backend-independent 2D values and collision helpers. The `Raylib`
 module provides the existing raylib game API as a separate adapter. Kryon keeps
 its UI geometry, drawing primitives, widgets, and raylib UI host.
 
+Kryon owns the raylib backend and its version. Game2D neither vendors nor
+builds raylib: its `Raylib` module binds to the C ABI of the raylib version
+selected by the Kryon dependency. Applications with a separate Kryon checkout
+for platform builds must keep that checkout at the same commit as Game2D's
+transitive Kryon entry in `ziran.lock`, including Kryon's raylib submodule.
+
 ```toml
 [dependencies.Game2D]
 git = "https://github.com/kryonlabs/game2d.git"
