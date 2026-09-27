@@ -1,0 +1,484 @@
+// Null raylib host for Ziran games: a link-time stand-in for libraylib
+// that lets the same Game2D Raylib adapter run without a window, GPU, or
+// audio device. Drawing, input, textures, and audio are no-ops; the clock
+// reads CLOCK_MONOTONIC, every frame advances by a fixed 1/60 s, and
+// randomness comes from a seeded LCG (KASAIVAL_HEADLESS_SEED, default 1)
+// so headless runs are reproducible. Generated from the Raylib adapter's
+// foreign surface; the record types mirror the adapter's C ABI.
+#import "c_string"
+using Geometry :: #import "geometry";
+using Drawing :: #import "drawing_props";
+
+null_libc :: #system_library "libc";
+
+NullTimespec :: struct {
+    seconds: s64
+    nanoseconds: s64
+}
+
+null_clock_gettime :: (clock_id: s32, tp: *NullTimespec) -> s32 #foreign null_libc "clock_gettime";
+null_getenv :: (name: *u8) -> *u8 #foreign null_libc "getenv";
+null_atoi :: (value: *u8) -> s32 #foreign null_libc "atoi";
+
+NULL_CLOCK_MONOTONIC :: 1;
+
+null_seed: u32;
+null_seeded: bool;
+
+null_ensure_seed :: () {
+    if null_seeded { return }
+    null_seeded = true
+    null_seed = 1
+    name: [32]u8
+    if CopyCString("KASAIVAL_HEADLESS_SEED", name[:]) {
+        value := null_getenv(*name[0])
+        if value != null {
+            parsed := null_atoi(value)
+            if parsed > 0 {
+                null_seed = cast(u32)parsed
+            }
+        }
+    }
+    if null_seed == 0 { null_seed = 1 }
+}
+
+#program_export
+GetTime :: () -> float64 {
+    tp: NullTimespec
+    if null_clock_gettime(NULL_CLOCK_MONOTONIC, *tp) == 0 {
+        return cast(float64)tp.seconds + cast(float64)tp.nanoseconds / 1000000000.0
+    }
+    return 0.0
+}
+
+#program_export
+GetFrameTime :: () -> float32 {
+    return 0.0166667
+}
+
+#program_export
+SetRandomSeed :: (seed: u32) {
+    null_seeded = true
+    if seed != 0 {
+        null_seed = seed
+    } else {
+        null_seed = 1
+    }
+}
+
+#program_export
+GetRandomValue :: (minimum: s32, maximum: s32) -> s32 {
+    null_ensure_seed()
+    if maximum <= minimum {
+        return minimum
+    }
+    null_seed = null_seed * 1664525 + 1013904223
+    span := null_seed % cast(u32)(maximum - minimum + 1)
+    return minimum + cast(s32)span
+}
+
+#program_export
+MeasureText :: (text: *u8, font_size: s32) -> s32 {
+    length: s32 = 0
+    while text[length] != cast(u8)0 {
+        length += 1
+    }
+    if font_size > 0 {
+        return length * (font_size / 2)
+    }
+    return length
+}
+
+#program_export
+GetScreenWidth :: () -> s32 { return 640 }
+#program_export
+GetScreenHeight :: () -> s32 { return 480 }
+#program_export
+IsWindowReady :: () -> bool { return true }
+#program_export
+WindowShouldClose :: () -> bool { return false }
+#program_export
+IsAudioDeviceReady :: () -> bool { return false }
+#program_export
+IsSoundValid :: (sound: Sound) -> bool { unused sound; return false }
+#program_export
+IsMusicValid :: (music: Music) -> bool { unused music; return false }
+#program_export
+IsRenderTextureValid :: (target: RenderTexture2D) -> bool { unused target; return false }
+
+AudioStream :: struct {
+    buffer: *void
+    processor: *void
+    sample_rate: u32
+    sample_size: u32
+    channels: u32
+}
+Music :: struct {
+    stream: AudioStream
+    frame_count: u32
+    looping: bool
+    ctx_type: s32
+    ctx_data: *void
+}
+RaylibImage :: struct {
+    data: *void
+    width: s32
+    height: s32
+    mipmaps: s32
+    format: s32
+}
+RenderTexture2D :: struct {
+    id: u32
+    texture: Texture2D
+    depth: Texture2D
+}
+Sound :: struct {
+    stream: AudioStream
+    frame_count: u32
+}
+Wave :: struct {
+    frame_count: u32
+    sample_rate: u32
+    sample_size: u32
+    channels: u32
+    data: *void
+}
+NullEmptyMusic :: () -> Music {
+    value: Music
+    value.frame_count = 0
+    value.looping = false
+    value.ctx_type = 0
+    value.ctx_data = null
+    return value
+}
+NullEmptyRaylibImage :: () -> RaylibImage {
+    value: RaylibImage
+    value.data = null
+    value.width = 0
+    value.height = 0
+    value.mipmaps = 0
+    value.format = 0
+    return value
+}
+NullEmptyRenderTexture2D :: () -> RenderTexture2D {
+    value: RenderTexture2D
+    value.id = 0
+    return value
+}
+NullEmptySound :: () -> Sound {
+    value: Sound
+    value.frame_count = 0
+    return value
+}
+NullEmptyTexture2D :: () -> Texture2D {
+    value: Texture2D
+    value.id = 0
+    value.width = 0
+    value.height = 0
+    value.mipmaps = 0
+    value.format = 0
+    return value
+}
+NullEmptyWave :: () -> Wave {
+    value: Wave
+    value.frame_count = 0
+    value.sample_rate = 0
+    value.sample_size = 0
+    value.channels = 0
+    value.data = null
+    return value
+}
+#program_export
+InitWindow :: (width: s32, height: s32, title: *u8) {
+}
+#program_export
+CloseWindow :: () {
+}
+#program_export
+IsWindowHidden :: () -> bool {
+    return false
+}
+#program_export
+IsWindowMinimized :: () -> bool {
+    return false
+}
+#program_export
+IsWindowFocused :: () -> bool {
+    return false
+}
+#program_export
+SetConfigFlags :: (flags: u32) {
+}
+#program_export
+SetWindowState :: (flags: u32) {
+}
+#program_export
+ClearWindowState :: (flags: u32) {
+}
+#program_export
+RestoreWindow :: () {
+}
+#program_export
+SetWindowFocused :: () {
+}
+#program_export
+SetTargetFPS :: (fps: s32) {
+}
+#program_export
+SetExitKey :: (key: s32) {
+}
+#program_export
+GetRenderWidth :: () -> s32 {
+    return 0
+}
+#program_export
+GetRenderHeight :: () -> s32 {
+    return 0
+}
+#program_export
+GetWindowScaleDPI :: () -> Vector2 {
+    return Vector2.{0.0, 0.0}
+}
+#program_export
+GetCurrentMonitor :: () -> s32 {
+    return 0
+}
+#program_export
+GetMonitorWidth :: (monitor: s32) -> s32 {
+    return 0
+}
+#program_export
+GetMonitorHeight :: (monitor: s32) -> s32 {
+    return 0
+}
+#program_export
+BeginDrawing :: () {
+}
+#program_export
+EndDrawing :: () {
+}
+#program_export
+IsKeyPressed :: (key: s32) -> bool {
+    return false
+}
+#program_export
+IsKeyDown :: (key: s32) -> bool {
+    return false
+}
+#program_export
+IsMouseButtonPressed :: (button: s32) -> bool {
+    return false
+}
+#program_export
+IsMouseButtonDown :: (button: s32) -> bool {
+    return false
+}
+#program_export
+IsMouseButtonReleased :: (button: s32) -> bool {
+    return false
+}
+#program_export
+GetMousePosition :: () -> Vector2 {
+    return Vector2.{0.0, 0.0}
+}
+#program_export
+CheckCollisionPointRec :: (point: Vector2, rectangle: Rectangle) -> bool {
+    return false
+}
+#program_export
+GetMouseDelta :: () -> Vector2 {
+    return Vector2.{0.0, 0.0}
+}
+#program_export
+GetMouseWheelMove :: () -> float32 {
+    return 0.0
+}
+#program_export
+GetTouchPointCount :: () -> s32 {
+    return 0
+}
+#program_export
+GetTouchPosition :: (index: s32) -> Vector2 {
+    return Vector2.{0.0, 0.0}
+}
+#program_export
+ClearBackground :: (color: Color) {
+}
+#program_export
+DrawRectangle :: (pos_x: s32, pos_y: s32, width: s32, height: s32, color: Color) {
+}
+#program_export
+DrawCircle :: (center_x: s32, center_y: s32, radius: float32, color: Color) {
+}
+#program_export
+DrawCircleV :: (center: Vector2, radius: float32, color: Color) {
+}
+#program_export
+DrawCircleGradient :: (center: Vector2, radius: float32, inner: Color, outer: Color) {
+}
+#program_export
+DrawEllipse :: (center_x: s32, center_y: s32, radius_h: float32, radius_v: float32, color: Color) {
+}
+#program_export
+DrawRing :: (center: Vector2, inner_radius: float32, outer_radius: float32, start_angle: float32, end_angle: float32, segments: s32, color: Color) {
+}
+#program_export
+DrawTriangle :: (v1: Vector2, v2: Vector2, v3: Vector2, color: Color) {
+}
+#program_export
+DrawLineEx :: (start: Vector2, end: Vector2, thickness: float32, color: Color) {
+}
+#program_export
+BeginMode2D :: (camera: Camera) {
+}
+#program_export
+EndMode2D :: () {
+}
+#program_export
+BeginBlendMode :: (mode: s32) {
+}
+#program_export
+EndBlendMode :: () {
+}
+#program_export
+BeginScissorMode :: (x: s32, y: s32, width: s32, height: s32) {
+}
+#program_export
+EndScissorMode :: () {
+}
+#program_export
+DrawText :: (value: *u8, pos_x: s32, pos_y: s32, font_size: s32, color: Color) {
+}
+#program_export
+LoadImageFromScreen :: () -> RaylibImage {
+    return NullEmptyRaylibImage()
+}
+#program_export
+UnloadImage :: (image: RaylibImage) {
+}
+#program_export
+ExportImage :: (image: RaylibImage, path: *u8) -> bool {
+    return false
+}
+#program_export
+LoadTexture :: (path: *u8) -> Texture2D {
+    return NullEmptyTexture2D()
+}
+#program_export
+UnloadTexture :: (texture: Texture2D) {
+}
+#program_export
+SetTextureFilter :: (texture: Texture2D, filter: s32) {
+}
+#program_export
+DrawTexturePro :: (texture: Texture2D, source: Rectangle, destination: Rectangle, origin: Vector2, rotation: float32, tint: Color) {
+}
+#program_export
+DrawTexture :: (texture: Texture2D, pos_x: s32, pos_y: s32, tint: Color) {
+}
+#program_export
+LoadRenderTexture :: (width: s32, height: s32) -> RenderTexture2D {
+    return NullEmptyRenderTexture2D()
+}
+#program_export
+UnloadRenderTexture :: (target: RenderTexture2D) {
+}
+#program_export
+BeginTextureMode :: (target: RenderTexture2D) {
+}
+#program_export
+EndTextureMode :: () {
+}
+#program_export
+InitAudioDevice :: () {
+}
+#program_export
+CloseAudioDevice :: () {
+}
+#program_export
+SetMasterVolume :: (volume: float32) {
+}
+#program_export
+PlaySound :: (sound: Sound) {
+}
+#program_export
+StopSound :: (sound: Sound) {
+}
+#program_export
+PauseSound :: (sound: Sound) {
+}
+#program_export
+IsSoundPlaying :: (sound: Sound) -> bool {
+    return false
+}
+#program_export
+UnloadSound :: (sound: Sound) {
+}
+#program_export
+SetSoundVolume :: (sound: Sound, volume: float32) {
+}
+#program_export
+SetSoundPitch :: (sound: Sound, pitch: float32) {
+}
+#program_export
+LoadWave :: (path: *u8) -> Wave {
+    return NullEmptyWave()
+}
+#program_export
+LoadWaveFromMemory :: (file_type: *u8, data: *u8, size: s32) -> Wave {
+    return NullEmptyWave()
+}
+#program_export
+UnloadWave :: (wave: Wave) {
+}
+#program_export
+WaveFormat :: (wave: *Wave, sample_rate: s32, sample_size: s32, channels: s32) {
+}
+#program_export
+LoadSoundFromWave :: (wave: Wave) -> Sound {
+    return NullEmptySound()
+}
+#program_export
+PlayMusicStream :: (music: Music) {
+}
+#program_export
+UpdateMusicStream :: (music: Music) {
+}
+#program_export
+StopMusicStream :: (music: Music) {
+}
+#program_export
+PauseMusicStream :: (music: Music) {
+}
+#program_export
+ResumeMusicStream :: (music: Music) {
+}
+#program_export
+IsMusicStreamPlaying :: (music: Music) -> bool {
+    return false
+}
+#program_export
+SeekMusicStream :: (music: Music, position: float32) {
+}
+#program_export
+SetMusicVolume :: (music: Music, volume: float32) {
+}
+#program_export
+UnloadMusicStream :: (music: Music) {
+}
+#program_export
+AttachAudioMixedProcessor :: (callback: *void) {
+    unused callback
+}
+#program_export
+DetachAudioMixedProcessor :: (callback: *void) {
+    unused callback
+}
+#program_export
+LoadSound :: (path: *u8) -> Sound {
+    return NullEmptySound()
+}
+#program_export
+LoadMusicStream :: (path: *u8) -> Music {
+    return NullEmptyMusic()
+}
