@@ -11,13 +11,11 @@
     }
   ],
   "root": {
-    "dependencies": {
-      "Kryon": "p11170d781bda6b01"
-    },
+    "dependencies": {"Kryon": "p11170d781bda6b01"},
     "name": "Game2D"
   },
   "toolchain": {
-    "commit": "9894422fa7722927dbf112299802ebae96ca290e",
+    "commit": "9ae10a7c902c3a86b491cbc53f7ab7d4efbd6579",
     "ref": "master",
     "url": "https://github.com/ziranlang/ziran.git"
   }
