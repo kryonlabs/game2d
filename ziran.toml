@@ -1,0 +1,15 @@
+[package]
+name = "Game2D"
+module_roots = ["src", "tests"]
+
+[toolchain]
+git = "https://github.com/ziranlang/ziran.git"
+ref = "master"
+
+[dependencies.Kryon]
+git = "https://github.com/kryonlabs/kryon.git"
+ref = "master"
+
+[exports]
+Game2D = "src/Game2D/module.zi"
+Raylib = "src/Raylib/module.zi"

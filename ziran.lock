@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "packages": [
+    {
+      "commit": "e7bd798600cea81a3983905ac7de8fd460877829",
+      "dependencies": {},
+      "id": "pbfb0225fc208cf6f",
+      "name": "Kryon",
+      "ref": "master",
+      "url": "https://github.com/kryonlabs/kryon.git"
+    }
+  ],
+  "root": {
+    "dependencies": {
+      "Kryon": "pbfb0225fc208cf6f"
+    },
+    "name": "Game2D"
+  },
+  "toolchain": {
+    "commit": "d511c230dd8efdc8459b719b4d8e2214bab1747f",
+    "ref": "master",
+    "url": "https://github.com/ziranlang/ziran.git"
+  }
+}
