@@ -8,12 +8,10 @@ its UI geometry, drawing primitives, widgets, and raylib UI host.
 
 Kryon owns the raylib backend and its version. Game2D neither vendors nor
 builds raylib: its `Raylib` module binds to the C ABI of the raylib version
-selected by the Kryon dependency. Applications with a separate Kryon checkout
-for platform builds must keep that checkout at the same commit as Game2D's
-transitive Kryon entry in `ziran.lock`, including Kryon's raylib submodule.
-When upgrading Game2D in an application, run `ziran update` for the full
-dependency graph. A targeted `ziran update Game2D` keeps the previous
-transitive Kryon pin.
+selected by the Kryon dependency. Platform builds can obtain that exact source
+with `ziran pkg path Kryon --locked --submodules`. Run `ziran update` to refresh
+all packages, or `ziran update Game2D` to refresh Game2D and its transitive
+Kryon dependency.
 
 ```toml
 [dependencies.Game2D]
