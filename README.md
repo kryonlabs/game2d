@@ -11,6 +11,9 @@ builds raylib: its `Raylib` module binds to the C ABI of the raylib version
 selected by the Kryon dependency. Applications with a separate Kryon checkout
 for platform builds must keep that checkout at the same commit as Game2D's
 transitive Kryon entry in `ziran.lock`, including Kryon's raylib submodule.
+When upgrading Game2D in an application, run `ziran update` for the full
+dependency graph. A targeted `ziran update Game2D` keeps the previous
+transitive Kryon pin.
 
 ```toml
 [dependencies.Game2D]
