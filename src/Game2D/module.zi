@@ -2,11 +2,6 @@
 // while the selected host owns drawing and input effects.
 using Geometry :: #import "geometry";
 
-Circle :: struct {
-    center: Vector2
-    radius: float32
-}
-
 #program_export
 CircleContains :: (circle: Circle, point: Vector2) -> bool {
     if circle.radius < 0.0 { return false }

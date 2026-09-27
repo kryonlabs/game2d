@@ -1,7 +1,8 @@
 # Game2D
 
-Game2D is an optional Ziran package for 2D games that use Kryon. The `Game2D`
-module holds backend-independent 2D values and collision helpers. The `Raylib`
+Game2D is an optional Ziran package for 2D games that use Kryon. Kryon provides
+the shared `Rectangle` and `Circle` values. The `Game2D` module adds collision
+helpers. The `Raylib`
 module provides the existing raylib game API as a separate adapter. Kryon keeps
 its UI geometry, drawing primitives, widgets, and raylib UI host.
 
