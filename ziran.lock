@@ -2,20 +2,29 @@
   "format": 1,
   "packages": [
     {
-      "commit": "80fb590059b0389552f91dd1409ff90dc95d9a85",
+      "commit": "fafa2cea97d0cb379d832086ba45a989fa6f9c8e",
       "dependencies": {},
-      "id": "p11170d781bda6b01",
-      "name": "Kryon",
+      "id": "p5a77c9c35110e925",
+      "name": "raylib",
+      "ref": "fafa2cea97d0cb379d832086ba45a989fa6f9c8e",
+      "source": true,
+      "url": "https://github.com/raysan5/raylib.git"
+    },
+    {
+      "commit": "eba5a07370e6fb8260274a867e8cc7edcd67b89c",
+      "dependencies": {"raylib": "p5a77c9c35110e925"},
+      "id": "pa609145f4004c02f",
+      "name": "kryon",
       "ref": "master",
       "url": "https://github.com/kryonlabs/kryon.git"
     }
   ],
   "root": {
-    "dependencies": {"Kryon": "p11170d781bda6b01"},
+    "dependencies": {"kryon": "pa609145f4004c02f"},
     "name": "Game2D"
   },
   "toolchain": {
-    "commit": "9ae10a7c902c3a86b491cbc53f7ab7d4efbd6579",
+    "commit": "c0e0e9847d9bf7c5e4368ec2745c3e7262323b50",
     "ref": "master",
     "url": "https://github.com/ziranlang/ziran.git"
   }

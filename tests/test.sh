@@ -6,8 +6,10 @@ cd "$repo"
 export ZIRAN_TEST_ALLOW_LOCAL_GIT=1
 unset DISPLAY WAYLAND_DISPLAY
 
-ziran=${ZIRAN:-../ziran/build/bin/ziran}
-compiler=${ZIRAN_DIR:-../ziran}
+ziran=${ZIRAN:-ziran}
+lock_flags=
+if test ! -f ziran.local.toml; then lock_flags=--locked; fi
+compiler=$("$ziran" pkg path ziran $lock_flags)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
@@ -30,7 +32,7 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 "${CXX:-c++}" -std=c++17 -I"$compiler/include" -Ibuild/raylib-cpp \
     -c build/raylib-cpp/Raylib.cpp -o build/Raylib-cpp.o
 
-raylib_header=${RAYLIB_HEADER_DIR:-../kryon/vendor/raylib/src}
+raylib_header=${RAYLIB_HEADER_DIR:-$("$ziran" pkg path raylib $lock_flags --submodules)/src}
 if test -f "$raylib_header/raylib.h"; then
     "${CC:-cc}" -std=c11 -DGENERATED -ffunction-sections \
         -Wl,--gc-sections -I"$compiler/include" -Ibuild/raylib-c \
