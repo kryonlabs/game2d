@@ -23,7 +23,7 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 "$ziran" bundle --project --entry game2d_behavior:main \
     -o build/game2d-behavior.zib tests/game2d_behavior.zi
-"$ziran" run build/game2d-behavior.zib
+"$ziran" run --project build/game2d-behavior.zib
 
 "$ziran" build --project --target=c -o build/raylib-c src/Raylib/module.zi
 "$ziran" build --project --target=cpp -o build/raylib-cpp src/Raylib/module.zi
