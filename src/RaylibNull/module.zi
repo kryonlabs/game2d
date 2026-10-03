@@ -252,6 +252,10 @@ GetMonitorHeight :: (monitor: s32) -> s32 {
     return 0
 }
 #program_export
+GetMonitorRefreshRate :: (monitor: s32) -> s32 {
+    return 0
+}
+#program_export
 BeginDrawing :: () {
 }
 #program_export
