@@ -91,6 +91,7 @@ TEXTURE_FILTER_BILINEAR :: 1;
 BLEND_ALPHA :: 0;
 BLEND_ADDITIVE :: 1;
 FLAG_WINDOW_RESIZABLE :: 4;
+FLAG_VSYNC_HINT :: 64;
 FLAG_WINDOW_HIDDEN :: 128;
 FLAG_WINDOW_ALWAYS_RUN :: 256;
 
@@ -120,6 +121,7 @@ RaylibGetWindowScaleDPI :: () -> Vector2 #foreign raylib "GetWindowScaleDPI";
 RaylibGetCurrentMonitor :: () -> s32 #foreign raylib "GetCurrentMonitor";
 RaylibGetMonitorWidth :: (monitor: s32) -> s32 #foreign raylib "GetMonitorWidth";
 RaylibGetMonitorHeight :: (monitor: s32) -> s32 #foreign raylib "GetMonitorHeight";
+RaylibGetMonitorRefreshRate :: (monitor: s32) -> s32 #foreign raylib "GetMonitorRefreshRate";
 RaylibBeginDrawing :: () #foreign raylib "BeginDrawing";
 RaylibEndDrawing :: () #foreign raylib "EndDrawing";
 
@@ -150,6 +152,7 @@ GetWindowScaleDPI :: () -> Vector2 { return RaylibGetWindowScaleDPI() }
 GetCurrentMonitor :: () -> s32 { return RaylibGetCurrentMonitor() }
 GetMonitorWidth :: (monitor: s32) -> s32 { return RaylibGetMonitorWidth(monitor) }
 GetMonitorHeight :: (monitor: s32) -> s32 { return RaylibGetMonitorHeight(monitor) }
+GetMonitorRefreshRate :: (monitor: s32) -> s32 { return RaylibGetMonitorRefreshRate(monitor) }
 BeginDrawing :: () { RaylibBeginDrawing() }
 EndDrawing :: () { RaylibEndDrawing() }
 
