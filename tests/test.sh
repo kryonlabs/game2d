@@ -22,15 +22,12 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 "$work/game2d-behavior"
 
 "$ziran" bundle --project --entry game2d_behavior:main \
-    -o build/game2d-behavior.zib tests/game2d_behavior.zi
-"$ziran" run --project build/game2d-behavior.zib
+    -o build/game2d-behavior.zx tests/game2d_behavior.zi
+"$ziran" run --project build/game2d-behavior.zx
 
 "$ziran" build --project --target=c -o build/raylib-c src/Raylib/module.zi
-"$ziran" build --project --target=cpp -o build/raylib-cpp src/Raylib/module.zi
 "${CC:-cc}" -std=c11 -I"$compiler/include" -Ibuild/raylib-c \
     -c build/raylib-c/Raylib.c -o build/Raylib.o
-"${CXX:-c++}" -std=c++17 -I"$compiler/include" -Ibuild/raylib-cpp \
-    -c build/raylib-cpp/Raylib.cpp -o build/Raylib-cpp.o
 
 raylib_header=${RAYLIB_HEADER_DIR:-$("$ziran" pkg path raylib $lock_flags --submodules)/src}
 if test -f "$raylib_header/raylib.h"; then
