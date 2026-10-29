@@ -26,15 +26,23 @@ main :: () -> s32 {
     if !Expect(GameSwipeDirection(*swipe, true, 40.0, 22.0) == 2, "held direction ignores jitter") { return 1 }
     if !Expect(GameSwipeDirection(*swipe, true, 40.0, 2.0) == 1, "re-anchor allows a corner") { return 1 }
     if !Expect(GameSwipeDirection(*swipe, false, 40.0, 2.0) == -1, "release stops movement") { return 1 }
-    held: GameSwipe
-    if !Expect(!GameSwipeIndicatorPlace(held, 0.0, 0.0, -1).visible, "no indicator without a press") { return 1 }
-    unused GameSwipeDirection(*held, true, 100.0, 100.0)
-    unused GameSwipeDirection(*held, true, 130.0, 100.0)
-    layout := GameSwipeIndicatorPlace(held, 130.0, 100.0, 2, 30.0)
+    stick: GameStick
+    if !Expect(!GameStickIndicatorPlace(stick, 0.0, 0.0).visible, "no indicator without a press") { return 1 }
+    if !Expect(!GameStickSteer(*stick, true, 100.0, 100.0).steering, "a press alone does not steer") { return 1 }
+    if !Expect(!GameStickSteer(*stick, true, 104.0, 103.0).steering, "jitter inside the dead zone does not steer") { return 1 }
+    lean := GameStickSteer(*stick, true, 118.0, 124.0)
+    if !Expect(lean.steering && lean.x > .59 && lean.x < .61 && lean.y > .79 && lean.y < .81, "steers in any direction") { return 1 }
+    layout := GameStickIndicatorPlace(stick, lean.x, lean.y, 30.0)
     if !Expect(layout.visible && layout.ring.x == 70.0 && layout.ring.width == 60.0, "ring stays where the press began") { return 1 }
-    if !Expect(layout.finger.x < 130.0 && layout.finger.x + layout.finger.width > 130.0, "dot follows the finger") { return 1 }
-    if !Expect(layout.pip.x > 120.0 && layout.pip.y < 100.0 && layout.pip.y + layout.pip.height > 100.0, "pip points right") { return 1 }
-    if !Expect(GameSwipeIndicatorPlace(held, 130.0, 100.0, -1).pip.width == 0.0, "no pip without a heading") { return 1 }
+    if !Expect(layout.finger.x < 118.0 && layout.finger.x + layout.finger.width > 118.0, "dot follows the finger") { return 1 }
+    if !Expect(layout.pip.x > 110.0 && layout.pip.y > 115.0, "pip points down and right") { return 1 }
+    unused GameStickSteer(*stick, true, 200.0, 100.0)
+    if !Expect(stick.start_x == 152.0 && stick.start_y == 100.0, "a far finger drags the anchor") { return 1 }
+    back := GameStickSteer(*stick, true, 140.0, 100.0)
+    if !Expect(back.steering && back.x == -1.0, "turning back answers at once") { return 1 }
+    if !Expect(!GameStickSteer(*stick, false, 0.0, 0.0).tapped, "a steered release is not a tap") { return 1 }
+    unused GameStickSteer(*stick, true, 50.0, 50.0)
+    if !Expect(GameStickSteer(*stick, false, 50.0, 50.0).tapped, "a still release is a tap") { return 1 }
     print("Game2D local navigation/control tests passed.\n")
     return 0
 }
