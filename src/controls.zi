@@ -12,12 +12,17 @@
 #import "kryon/text_widget"
 #import "kryon/text_align"
 #import "kryon/direction_pad"
-GameSwipe :: struct { active: bool; x: float32; y: float32; direction: s32 }
+// x and y are the last accepted point; start_x and start_y where the press began.
+GameSwipe :: struct { active: bool; x: float32; y: float32; direction: s32; start_x: float32; start_y: float32 }
 // Re-anchor after each accepted turn, as a finger follows successive corners.
 GameSwipeDirection :: (state: *GameSwipe, down: bool, x: float32, y: float32,
     minimum: float32 = 6.0) -> s32 {
     if !down { state.active = false; state.direction = -1; return -1 }
-    if !state.active { state.active = true; state.x = x; state.y = y; state.direction = -1; return -1 }
+    if !state.active {
+        state.active = true; state.x = x; state.y = y; state.start_x = x; state.start_y = y
+        state.direction = -1
+        return -1
+    }
     dx := x - state.x
     dy := y - state.y
     across := ifx dx < 0.0 then -dx else dx
@@ -27,6 +32,41 @@ GameSwipeDirection :: (state: *GameSwipe, down: bool, x: float32, y: float32,
     state.x = x; state.y = y
     state.direction = ifx across >= along then (ifx dx < 0.0 then 0 else 2) else (ifx dy < 0.0 then 1 else 3)
     return state.direction
+}
+GameSwipeIndicatorLayout :: struct { visible: bool; ring: Rectangle; finger: Rectangle; pip: Rectangle }
+// Where a held swipe is drawn: a ring of RADIUS where the press began, a dot
+// under the finger and, once a heading is set, a pip on the ring towards it.
+GameSwipeIndicatorPlace :: (state: GameSwipe, x: float32, y: float32, heading: s32,
+    radius: float32 = 34.0) -> GameSwipeIndicatorLayout {
+    layout: GameSwipeIndicatorLayout
+    if !state.active { return layout }
+    layout.visible = true
+    layout.ring = Rectangle.{state.start_x - radius, state.start_y - radius, radius * 2.0, radius * 2.0}
+    dot := radius * .42
+    layout.finger = Rectangle.{x - dot * .5, y - dot * .5, dot, dot}
+    if heading >= 0 && heading <= 3 {
+        pip := radius * .36
+        across: float32 = ifx heading == 0 then -1.0 else ifx heading == 2 then 1.0 else 0.0
+        along: float32 = ifx heading == 1 then -1.0 else ifx heading == 3 then 1.0 else 0.0
+        layout.pip = Rectangle.{state.start_x + across * radius - pip * .5,
+            state.start_y + along * radius - pip * .5, pip, pip}
+    }
+    return layout
+}
+// Draws GameSwipeIndicatorPlace's layout over the play area while a swipe
+// is held, so a player sees where the touch steers.
+GameSwipeIndicator :: (session: Session, key: u64, state: GameSwipe, x: float32, y: float32,
+    heading: s32, radius: float32 = 34.0) {
+    layout := GameSwipeIndicatorPlace(state, x, y, heading, radius)
+    if !layout.visible { return }
+    unused Box(session, BoxProps.{.key = key, .bounds = layout.ring, .fill = ColorFromPacked(0xffffff22),
+        .border = ColorFromPacked(0xffffffb0), .radius = layout.ring.width * .5})
+    if layout.pip.width > 0.0 {
+        unused Box(session, BoxProps.{.key = key + 1, .bounds = layout.pip, .fill = ColorFromPacked(0xffffffe6),
+            .radius = layout.pip.width * .5})
+    }
+    unused Box(session, BoxProps.{.key = key + 2, .bounds = layout.finger, .fill = ColorFromPacked(0xffffffcc),
+        .border = ColorFromPacked(0x05192299), .radius = layout.finger.width * .5})
 }
 GameControlsProps :: struct {
     key: u64

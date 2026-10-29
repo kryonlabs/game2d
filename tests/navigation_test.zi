@@ -26,6 +26,15 @@ main :: () -> s32 {
     if !Expect(GameSwipeDirection(*swipe, true, 40.0, 22.0) == 2, "held direction ignores jitter") { return 1 }
     if !Expect(GameSwipeDirection(*swipe, true, 40.0, 2.0) == 1, "re-anchor allows a corner") { return 1 }
     if !Expect(GameSwipeDirection(*swipe, false, 40.0, 2.0) == -1, "release stops movement") { return 1 }
+    held: GameSwipe
+    if !Expect(!GameSwipeIndicatorPlace(held, 0.0, 0.0, -1).visible, "no indicator without a press") { return 1 }
+    unused GameSwipeDirection(*held, true, 100.0, 100.0)
+    unused GameSwipeDirection(*held, true, 130.0, 100.0)
+    layout := GameSwipeIndicatorPlace(held, 130.0, 100.0, 2, 30.0)
+    if !Expect(layout.visible && layout.ring.x == 70.0 && layout.ring.width == 60.0, "ring stays where the press began") { return 1 }
+    if !Expect(layout.finger.x < 130.0 && layout.finger.x + layout.finger.width > 130.0, "dot follows the finger") { return 1 }
+    if !Expect(layout.pip.x > 120.0 && layout.pip.y < 100.0 && layout.pip.y + layout.pip.height > 100.0, "pip points right") { return 1 }
+    if !Expect(GameSwipeIndicatorPlace(held, 130.0, 100.0, -1).pip.width == 0.0, "no pip without a heading") { return 1 }
     print("Game2D local navigation/control tests passed.\n")
     return 0
 }
