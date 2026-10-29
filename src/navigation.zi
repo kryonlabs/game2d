@@ -9,6 +9,7 @@ GAME_PAD :: 1
 GameNavigation :: struct {
     page: s32
     previous: s32
+    settings_previous: s32
     controls_mode: s32
     controls_selected: bool
     running: bool
@@ -44,7 +45,7 @@ GameNavigationPause :: (state: *GameNavigation) {
     if state.page == GAME_PLAYING { state.page = GAME_PAUSED }
 }
 GameNavigationSettings :: (state: *GameNavigation) {
-    state.previous = state.page
+    state.settings_previous = state.page
     state.page = GAME_SETTINGS
 }
 GameNavigationResume :: (state: *GameNavigation) {
@@ -55,6 +56,7 @@ GameNavigationBack :: (state: *GameNavigation) -> bool {
     if state.page == GAME_TITLE { return false }
     if state.page == GAME_PLAYING { state.page = GAME_PAUSED }
     else if state.page == GAME_PAUSED { state.page = GAME_PLAYING }
+    else if state.page == GAME_SETTINGS { state.page = state.settings_previous }
     else { state.page = state.previous; state.pending_start = false }
     return true
 }

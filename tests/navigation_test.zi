@@ -16,6 +16,8 @@ main :: () -> s32 {
     if !Expect(state.page == GAME_PLAYING, "Back resumes pause") { return 1 }
     GameNavigationHome(*state)
     GameNavigationSettings(*state)
+    GameNavigationControls(*state)
+    unused GameNavigationChoose(*state, GAME_SWIPE)
     unused GameNavigationBack(*state)
     if !Expect(state.page == GAME_TITLE && !GameNavigationBack(*state), "settings returns to title; title does not trap Back") { return 1 }
     swipe: GameSwipe
