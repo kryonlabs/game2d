@@ -1,0 +1,60 @@
+// Game-owned navigation, independent of publishers, accounts and platforms.
+GAME_TITLE :: 0
+GAME_PLAYING :: 1
+GAME_PAUSED :: 2
+GAME_SETTINGS :: 3
+GAME_CONTROLS :: 4
+GAME_SWIPE :: 0
+GAME_PAD :: 1
+GameNavigation :: struct {
+    page: s32
+    previous: s32
+    controls_mode: s32
+    controls_selected: bool
+    running: bool
+    pending_start: bool
+}
+GameNavigationPlay :: (state: *GameNavigation) -> bool {
+    if !state.controls_selected {
+        state.previous = GAME_TITLE
+        state.page = GAME_CONTROLS
+        state.pending_start = true
+        return false
+    }
+    state.page = GAME_PLAYING
+    state.running = true
+    return true
+}
+GameNavigationControls :: (state: *GameNavigation) {
+    state.previous = state.page
+    state.page = GAME_CONTROLS
+    state.pending_start = false
+}
+GameNavigationChoose :: (state: *GameNavigation, mode: s32) -> bool {
+    if mode != GAME_SWIPE && mode != GAME_PAD { return false }
+    state.controls_mode = mode
+    state.controls_selected = true
+    start := state.pending_start
+    state.pending_start = false
+    state.page = ifx start then GAME_PLAYING else state.previous
+    if start { state.running = true }
+    return start
+}
+GameNavigationPause :: (state: *GameNavigation) {
+    if state.page == GAME_PLAYING { state.page = GAME_PAUSED }
+}
+GameNavigationSettings :: (state: *GameNavigation) {
+    state.previous = state.page
+    state.page = GAME_SETTINGS
+}
+GameNavigationResume :: (state: *GameNavigation) {
+    state.page = ifx state.running then GAME_PLAYING else GAME_TITLE
+}
+GameNavigationHome :: (state: *GameNavigation) { state.page = GAME_TITLE }
+GameNavigationBack :: (state: *GameNavigation) -> bool {
+    if state.page == GAME_TITLE { return false }
+    if state.page == GAME_PLAYING { state.page = GAME_PAUSED }
+    else if state.page == GAME_PAUSED { state.page = GAME_PLAYING }
+    else { state.page = state.previous; state.pending_start = false }
+    return true
+}

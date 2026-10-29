@@ -6,6 +6,13 @@ helpers. The `Raylib`
 module provides the existing raylib game API as a separate adapter. Kryon keeps
 its UI geometry, drawing primitives, widgets, and raylib UI host.
 
+`game2d/navigation` owns the portable title/play/pause/settings/control-choice
+state machine. `game2d/controls` supplies `GameControlsChoice` and continuous,
+re-anchored `GameSwipeDirection` steering. The chooser uses Kryon's standard
+DirectionPad and buttons. Callers supply translated labels, persist their
+chosen mode, and retain their own game rules, title artwork and account actions.
+Neither module depends on a publisher, account service, game catalog or raylib.
+
 Kryon owns the raylib backend and its version. Game2D neither vendors nor
 builds raylib: its `Raylib` module binds to the C ABI of the raylib version
 selected by the Kryon dependency. Platform builds can obtain that exact source

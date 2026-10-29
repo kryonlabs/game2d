@@ -13,3 +13,5 @@ ref = "master"
 [exports]
 Game2D = "src/Game2D/module.zi"
 Raylib = "src/Raylib/module.zi"
+navigation = "src/navigation.zi"
+controls = "src/controls.zi"

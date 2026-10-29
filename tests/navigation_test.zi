@@ -1,0 +1,29 @@
+#import "navigation"
+#import "controls"
+Expect :: (ok: bool, message: string) -> bool {
+    if !ok { print("Game2D local test failed: %\n", message) }
+    return ok
+}
+main :: () -> s32 {
+    state: GameNavigation
+    if !Expect(!GameNavigationPlay(*state) && state.page == GAME_CONTROLS, "first play asks for controls") { return 1 }
+    if !Expect(!GameNavigationChoose(*state, 9) && !state.controls_selected, "reject unknown controls") { return 1 }
+    if !Expect(GameNavigationChoose(*state, GAME_SWIPE) && state.page == GAME_PLAYING, "choice starts the pending game") { return 1 }
+    GameNavigationPause(*state)
+    GameNavigationControls(*state)
+    if !Expect(!GameNavigationChoose(*state, GAME_PAD) && state.page == GAME_PAUSED, "changing controls preserves paused game") { return 1 }
+    unused GameNavigationBack(*state)
+    if !Expect(state.page == GAME_PLAYING, "Back resumes pause") { return 1 }
+    GameNavigationHome(*state)
+    GameNavigationSettings(*state)
+    unused GameNavigationBack(*state)
+    if !Expect(state.page == GAME_TITLE && !GameNavigationBack(*state), "settings returns to title; title does not trap Back") { return 1 }
+    swipe: GameSwipe
+    if !Expect(GameSwipeDirection(*swipe, true, 20.0, 20.0) == -1, "press does not invent a direction") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 40.0, 20.0) == 2, "swipe right") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 40.0, 22.0) == 2, "held direction ignores jitter") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 40.0, 2.0) == 1, "re-anchor allows a corner") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, false, 40.0, 2.0) == -1, "release stops movement") { return 1 }
+    print("Game2D local navigation/control tests passed.\n")
+    return 0
+}

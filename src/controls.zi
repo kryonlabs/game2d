@@ -1,0 +1,78 @@
+// Shared control selection and continuous touch steering for game apps.
+// All copy is caller-owned so consumers can supply their own translations.
+#import "kryon/session"
+#import "kryon/geometry"
+#import "kryon/box_props"
+#import "kryon/box_widget"
+#import "kryon/drawing_props"
+#import "kryon/button_props"
+#import "kryon/control_props"
+#import "kryon/button_widget"
+#import "kryon/text_props"
+#import "kryon/text_widget"
+#import "kryon/text_align"
+#import "kryon/direction_pad"
+GameSwipe :: struct { active: bool; x: float32; y: float32; direction: s32 }
+// Re-anchor after each accepted turn, as a finger follows successive corners.
+GameSwipeDirection :: (state: *GameSwipe, down: bool, x: float32, y: float32,
+    minimum: float32 = 6.0) -> s32 {
+    if !down { state.active = false; state.direction = -1; return -1 }
+    if !state.active { state.active = true; state.x = x; state.y = y; state.direction = -1; return -1 }
+    dx := x - state.x
+    dy := y - state.y
+    across := ifx dx < 0.0 then -dx else dx
+    along := ifx dy < 0.0 then -dy else dy
+    if minimum <= 0.0 { minimum = 6.0 }
+    if across < minimum && along < minimum { return state.direction }
+    state.x = x; state.y = y
+    state.direction = ifx across >= along then (ifx dx < 0.0 then 0 else 2) else (ifx dy < 0.0 then 1 else 3)
+    return state.direction
+}
+GameControlsProps :: struct {
+    key: u64
+    bounds: Rectangle
+    now: float64
+    title: string
+    swipe_label: string
+    pad_label: string
+    selected: s32
+}
+// Returns 0 for swipe, 1 for the pad, or -1 while choosing. The pad preview
+// is the actual reusable DirectionPad, with the same accessible hit targets.
+GameControlsChoice :: (session: Session, props: GameControlsProps) -> s32 {
+    width := props.bounds.width - 32.0
+    if width > 600.0 { width = 600.0 }
+    height := props.bounds.height - 32.0
+    if height > 360.0 { height = 360.0 }
+    card := Rectangle.{props.bounds.x + (props.bounds.width - width) * .5,
+        props.bounds.y + (props.bounds.height - height) * .5, width, height}
+    unused Box(session, BoxProps.{.key = props.key, .bounds = card,
+        .fill = ColorFromPacked(0x112a3bee), .border = ColorFromPacked(0x80cbd8ff), .radius = 24.0})
+    unused Text(session, TextProps.{.key = props.key + 1, .text = props.title,
+        .bounds = Rectangle.{card.x + 16.0, card.y + 18.0, width - 32.0, 36.0},
+        .font = 23, .align = TextAlign.TextAlignCenter})
+    tile_width := (width - 48.0) * .5
+    tile_height := height - 92.0
+    for index: 0..1 {
+        tile := Rectangle.{card.x + 16.0 + cast(float32)index * (tile_width + 16.0),
+            card.y + 68.0, tile_width, tile_height}
+        unused Box(session, BoxProps.{.key = props.key + 2 + cast(u64)index, .bounds = tile,
+            .fill = ColorFromPacked(0x051922ee), .radius = 16.0})
+        preview := Rectangle.{tile.x + 16.0, tile.y + 10.0, tile.width - 32.0, tile.height - 72.0}
+        if index == 0 {
+            unused Text(session, TextProps.{.key = props.key + 4, .text = "↔  ↕", .font = 36,
+                .bounds = preview, .align = TextAlign.TextAlignCenter, .vertical_align = TextAlign.TextAlignCenter})
+        } else {
+            pad := DirectionPad(session, DirectionPadProps.{.key = props.key + 10,
+                .bounds = preview, .label = props.pad_label, .now = props.now})
+            if pad.step { return 1 }
+        }
+        if Button(session, ButtonProps.{.key = props.key + 30 + cast(u64)index,
+            .id = cast(s32)props.key + 30 + cast(s32)index,
+            .bounds = Rectangle.{tile.x + 8.0, tile.y + tile.height - 56.0, tile.width - 16.0, 44.0},
+            .label = ifx index == 0 then props.swipe_label else props.pad_label,
+            .selected = props.selected == index,
+            .emphasis = ButtonEmphasis.ButtonEmphasisFilled}) != 0 { return cast(s32)index }
+    }
+    return -1
+}

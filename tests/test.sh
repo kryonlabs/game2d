@@ -39,4 +39,8 @@ if test -f "$raylib_header/raylib.h"; then
     test "$(build/generated-abi)" = "$(build/raylib-abi)"
 fi
 
+"$ziran" build --project --target=c --exe --entry navigation_test:main -o build/navigation-test tests/navigation_test.zi
+build/navigation-test/navigation_test
+"$ziran" bundle --project --entry navigation_test:main -o build/navigation-test.zx tests/navigation_test.zi
+"$ziran" run --project build/navigation-test.zx
 echo "Game2D source, native, portable, and raylib ABI checks passed"
