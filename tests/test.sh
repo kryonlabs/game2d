@@ -41,6 +41,11 @@ fi
 
 "$ziran" build --project --target=c --exe --entry navigation_test:main -o build/navigation-test tests/navigation_test.zi
 build/navigation-test/navigation_test
-"$ziran" bundle --project --entry navigation_test:main -o build/navigation-test.zx tests/navigation_test.zi
+# The stick paint test commits Box paint; its raster stubs stand in for a host.
+shape=kryon/raster_shape
+"$ziran" bundle --project \
+    --bind "$shape:RasterRoundedRectangle=navigation_test:RasterRoundedRectangle" \
+    --bind "$shape:RasterRoundedRectangleOutline=navigation_test:RasterRoundedRectangleOutline" \
+    --entry navigation_test:main -o build/navigation-test.zx tests/navigation_test.zi
 "$ziran" run --project build/navigation-test.zx
 echo "Game2D source, native, portable, and raylib ABI checks passed"

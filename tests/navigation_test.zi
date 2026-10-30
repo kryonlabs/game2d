@@ -1,9 +1,31 @@
+#import "kryon/session"
+#import "kryon/geometry"
+#import "kryon/drawing_props"
+#import "kryon/tree"
+#import "kryon/Frame"
+Paint :: #import "kryon/paint_queue"
 #import "navigation"
 #import "controls"
+using FrameStatus;
 Expect :: (ok: bool, message: string) -> bool {
     if !ok { print("Game2D local test failed: %\n", message) }
     return ok
 }
+// The stick test inspects committed paint without presenting it; these let
+// native and portable builds resolve the host raster surface Box reaches.
+#program_export
+RasterRoundedRectangle :: (bounds: Rectangle, radius: float32,
+    segments: s32, color: Color) {
+}
+#program_export
+RasterRoundedRectangleOutline :: (bounds: Rectangle, radius: float32,
+    segments: s32, width: float32, color: Color) {
+}
+Brightness :: (red: u8, green: u8, blue: u8) -> float32 {
+    return (cast(float32)red * .2126 + cast(float32)green * .7152 +
+        cast(float32)blue * .0722) / 255.0
+}
+#program_export
 main :: () -> s32 {
     state: GameNavigation
     if !Expect(!GameNavigationPlay(*state) && state.page == GAME_CONTROLS, "first play asks for controls") { return 1 }
@@ -43,6 +65,55 @@ main :: () -> s32 {
     if !Expect(!GameStickSteer(*stick, false, 0.0, 0.0).tapped, "a steered release is not a tap") { return 1 }
     unused GameStickSteer(*stick, true, 50.0, 50.0)
     if !Expect(GameStickSteer(*stick, false, 50.0, 50.0).tapped, "a still release is a tap") { return 1 }
+    render_stick: GameStick
+    unused GameStickSteer(*render_stick, true, 120.0, 140.0)
+    held := GameStickSteer(*render_stick, true, 138.0, 144.0)
+    session := SessionOpen()
+    if !Expect(SessionValid(session), "opens a headless paint session") { return 1 }
+    defer { unused SessionClose(session) }
+    held_status := BeginFrame(session, cast(u64)1, Rectangle.{0.0, 0.0, 400.0, 400.0})
+    if !Expect(held_status == cast(FrameStatus)FrameOk,
+        "begins a headless paint frame") { return 1 }
+    GameStickIndicator(session, cast(u64)52020, render_stick, held.x, held.y)
+    if !Expect(CommitFrame(session) == cast(FrameStatus)FrameOk,
+        "commits the held paint frame") { return 1 }
+    paint_count := Paint.PendingPaintCount(session)
+    if !Expect(paint_count == 6, "draws backing, rim and outlined markers") { return 1 }
+    rim := Paint.PendingPaintAt(session, 0)
+    backing := Paint.PendingPaintAt(session, 1)
+    pip := Paint.PendingPaintAt(session, 2)
+    pip_center := Paint.PendingPaintAt(session, 3)
+    finger := Paint.PendingPaintAt(session, 4)
+    finger_center := Paint.PendingPaintAt(session, 5)
+    rim_thickness := (rim.bounds.width - backing.bounds.width) * .5
+    if !Expect(rim.bounds.width == 80.0 && rim_thickness == 3.0,
+        "uses a larger ring with a thick rim") { return 1 }
+    if !Expect(Brightness(backing.color.r, backing.color.g, backing.color.b) < .25 &&
+        Brightness(rim.color.r, rim.color.g, rim.color.b) > .80 &&
+        backing.color.a > 200 && rim.color.a > 230,
+        "backing keeps a strong contrast with the rim") { return 1 }
+    if !Expect(finger.bounds.width >= 24.0 && pip.bounds.width >= 20.0,
+        "markers are large enough to see") { return 1 }
+    if !Expect(Brightness(finger_center.color.r, finger_center.color.g, finger_center.color.b) < .25 &&
+        Brightness(pip_center.color.r, pip_center.color.g, pip_center.color.b) < .25 &&
+        Brightness(finger.color.r, finger.color.g, finger.color.b) > .80 &&
+        Brightness(pip.color.r, pip.color.g, pip.color.b) > .80,
+        "markers keep dark centers and bright outlines") { return 1 }
+    if !Expect(rim.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill &&
+        backing.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill &&
+        finger.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill &&
+        finger_center.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill,
+        "paint commands are layered filled circles") { return 1 }
+    Paint.PaintClear(session)
+    unused GameStickSteer(*render_stick, false, 138.0, 144.0)
+    released_status := BeginFrame(session, cast(u64)1, Rectangle.{0.0, 0.0, 400.0, 400.0})
+    if !Expect(released_status == cast(FrameStatus)FrameOk,
+        "begins the released paint frame") { return 1 }
+    GameStickIndicator(session, cast(u64)52020, render_stick, held.x, held.y)
+    if !Expect(CommitFrame(session) == cast(FrameStatus)FrameOk,
+        "commits the released paint frame") { return 1 }
+    if !Expect(Paint.PendingPaintCount(session) == 0, "release hides the indicator") { return 1 }
+    Paint.PaintClear(session)
     print("Game2D local navigation/control tests passed.\n")
     return 0
 }

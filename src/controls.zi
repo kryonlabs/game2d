@@ -76,15 +76,15 @@ GameStickIndicatorLayout :: struct { visible: bool; ring: Rectangle; finger: Rec
 // Where a held stick is drawn: a ring of RADIUS where the press is anchored,
 // a dot under the finger and, for a heading, a pip on the ring towards it.
 GameStickIndicatorPlace :: (state: GameStick, heading_x: float32, heading_y: float32,
-    radius: float32 = 34.0) -> GameStickIndicatorLayout {
+    radius: float32 = 40.0) -> GameStickIndicatorLayout {
     layout: GameStickIndicatorLayout
     if !state.active { return layout }
     layout.visible = true
     layout.ring = Rectangle.{state.start_x - radius, state.start_y - radius, radius * 2.0, radius * 2.0}
-    dot := radius * .42
+    dot := radius * .60
     layout.finger = Rectangle.{state.x - dot * .5, state.y - dot * .5, dot, dot}
     if heading_x != 0.0 || heading_y != 0.0 {
-        pip := radius * .36
+        pip := radius * .50
         layout.pip = Rectangle.{state.start_x + heading_x * radius - pip * .5,
             state.start_y + heading_y * radius - pip * .5, pip, pip}
     }
@@ -93,17 +93,30 @@ GameStickIndicatorPlace :: (state: GameStick, heading_x: float32, heading_y: flo
 // Draws GameStickIndicatorPlace's layout over the play area while a press
 // is held, so a player sees where the touch steers.
 GameStickIndicator :: (session: Session, key: u64, state: GameStick, heading_x: float32,
-    heading_y: float32, radius: float32 = 34.0) {
+    heading_y: float32, radius: float32 = 40.0) {
     layout := GameStickIndicatorPlace(state, heading_x, heading_y, radius)
     if !layout.visible { return }
-    unused Box(session, BoxProps.{.key = key, .bounds = layout.ring, .fill = ColorFromPacked(0xffffff22),
-        .border = ColorFromPacked(0xffffffb0), .radius = layout.ring.width * .5})
+    edge: float32 = 3.0
+    rim := Rectangle.{layout.ring.x + edge, layout.ring.y + edge,
+        layout.ring.width - edge * 2.0, layout.ring.height - edge * 2.0}
+    unused Box(session, BoxProps.{.key = key, .bounds = layout.ring,
+        .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.ring.width * .5})
+    unused Box(session, BoxProps.{.key = key + 1, .bounds = rim,
+        .fill = ColorFromPacked(0x081d29d8), .radius = rim.width * .5})
     if layout.pip.width > 0.0 {
-        unused Box(session, BoxProps.{.key = key + 1, .bounds = layout.pip, .fill = ColorFromPacked(0xffffffe6),
-            .radius = layout.pip.width * .5})
+        pip_inner := Rectangle.{layout.pip.x + edge * .5, layout.pip.y + edge * .5,
+            layout.pip.width - edge, layout.pip.height - edge}
+        unused Box(session, BoxProps.{.key = key + 2, .bounds = layout.pip,
+            .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.pip.width * .5})
+        unused Box(session, BoxProps.{.key = key + 3, .bounds = pip_inner,
+            .fill = ColorFromPacked(0x081d29e6), .radius = pip_inner.width * .5})
     }
-    unused Box(session, BoxProps.{.key = key + 2, .bounds = layout.finger, .fill = ColorFromPacked(0xffffffcc),
-        .border = ColorFromPacked(0x05192299), .radius = layout.finger.width * .5})
+    finger_inner := Rectangle.{layout.finger.x + edge * .5, layout.finger.y + edge * .5,
+        layout.finger.width - edge, layout.finger.height - edge}
+    unused Box(session, BoxProps.{.key = key + 4, .bounds = layout.finger,
+        .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.finger.width * .5})
+    unused Box(session, BoxProps.{.key = key + 5, .bounds = finger_inner,
+        .fill = ColorFromPacked(0x081d29e6), .radius = finger_inner.width * .5})
 }
 GameControlsProps :: struct {
     key: u64
