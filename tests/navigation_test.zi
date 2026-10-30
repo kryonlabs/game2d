@@ -58,6 +58,13 @@ main :: () -> s32 {
     if !Expect(layout.visible && layout.ring.x == 70.0 && layout.ring.width == 60.0, "ring stays where the press began") { return 1 }
     if !Expect(layout.finger.x < 118.0 && layout.finger.x + layout.finger.width > 118.0, "dot follows the finger") { return 1 }
     if !Expect(layout.pip.x > 110.0 && layout.pip.y > 115.0, "pip points down and right") { return 1 }
+    preview := GameSwipePreviewPlace(Rectangle.{100.0, 50.0, 160.0, 120.0}, 0.0)
+    turned := GameSwipePreviewPlace(Rectangle.{100.0, 50.0, 160.0, 120.0}, 1.0)
+    if !Expect(preview.visible && preview.ring.x >= 100.0 && preview.ring.y >= 50.0 &&
+        preview.ring.x + preview.ring.width <= 260.0 && preview.ring.y + preview.ring.height <= 170.0,
+        "swipe preview stays in its card") { return 1 }
+    if !Expect(preview.finger.x != turned.finger.x || preview.finger.y != turned.finger.y,
+        "swipe preview shows movement") { return 1 }
     unused GameStickSteer(*stick, true, 200.0, 100.0)
     if !Expect(stick.start_x == 152.0 && stick.start_y == 100.0, "a far finger drags the anchor") { return 1 }
     back := GameStickSteer(*stick, true, 140.0, 100.0)

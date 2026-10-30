@@ -96,6 +96,9 @@ GameStickIndicator :: (session: Session, key: u64, state: GameStick, heading_x: 
     heading_y: float32, radius: float32 = 40.0) {
     layout := GameStickIndicatorPlace(state, heading_x, heading_y, radius)
     if !layout.visible { return }
+    GameStickIndicatorPaint(session, key, layout)
+}
+GameStickIndicatorPaint :: (session: Session, key: u64, layout: GameStickIndicatorLayout) {
     edge: float32 = 3.0
     rim := Rectangle.{layout.ring.x + edge, layout.ring.y + edge,
         layout.ring.width - edge * 2.0, layout.ring.height - edge * 2.0}
@@ -127,6 +130,27 @@ GameControlsProps :: struct {
     pad_label: string
     selected: s32
 }
+GameSwipePreviewPlace :: (bounds: Rectangle, now: float64) -> GameStickIndicatorLayout {
+    shortest := ifx bounds.width < bounds.height then bounds.width else bounds.height
+    radius := shortest * .22
+    center_x := bounds.x + bounds.width * .5
+    center_y := bounds.y + bounds.height * .5
+    angle := now * 1.7
+    heading_x := cast(float32)Math.Cos(angle)
+    heading_y := cast(float32)Math.Sin(angle)
+    state: GameStick
+    state.active = true
+    state.start_x = center_x
+    state.start_y = center_y
+    state.x = center_x + heading_x * radius * .62
+    state.y = center_y + heading_y * radius * .62
+    return GameStickIndicatorPlace(state, heading_x, heading_y, radius)
+}
+GameSwipePreview :: (session: Session, key: u64, bounds: Rectangle, now: float64) {
+    layout := GameSwipePreviewPlace(bounds, now)
+    if !layout.visible { return }
+    GameStickIndicatorPaint(session, key, layout)
+}
 // Returns 0 for swipe, 1 for the pad, or -1 while choosing. The pad preview
 // is the actual reusable DirectionPad, with the same accessible hit targets.
 GameControlsChoice :: (session: Session, props: GameControlsProps) -> s32 {
@@ -150,8 +174,10 @@ GameControlsChoice :: (session: Session, props: GameControlsProps) -> s32 {
             .fill = ColorFromPacked(0x051922ee), .radius = 16.0})
         preview := Rectangle.{tile.x + 16.0, tile.y + 10.0, tile.width - 32.0, tile.height - 72.0}
         if index == 0 {
-            unused Text(session, TextProps.{.key = props.key + 4, .text = "↔  ↕", .font = 36,
-                .bounds = preview, .align = TextAlign.TextAlignCenter, .vertical_align = TextAlign.TextAlignCenter})
+            GameSwipePreview(session, props.key + 4, preview, props.now)
+            if Button(session, ButtonProps.{.key = props.key + 32,
+                .id = cast(s32)props.key + 32, .bounds = preview, .label = props.swipe_label,
+                .selected = props.selected == 0, .invisible = true}) != 0 { return 0 }
         } else {
             pad := DirectionPad(session, DirectionPadProps.{.key = props.key + 10,
                 .bounds = preview, .label = props.pad_label, .now = props.now})
