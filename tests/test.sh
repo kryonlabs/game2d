@@ -10,7 +10,8 @@ ziran=${ZIRAN:-ziran}
 lock_flags=
 if test ! -f ziran.local.toml; then lock_flags=--locked; fi
 compiler=$("$ziran" pkg path ziran $lock_flags)
-work=$(mktemp -d)
+mkdir -p work
+work=$(mktemp -d "$repo/work/test.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 "$ziran" check --project src/Game2D/module.zi
@@ -39,13 +40,5 @@ if test -f "$raylib_header/raylib.h"; then
     test "$(build/generated-abi)" = "$(build/raylib-abi)"
 fi
 
-"$ziran" build --project --target=c --exe --entry navigation_test:main -o build/navigation-test tests/navigation_test.zi
-build/navigation-test/navigation_test
-# The stick paint test commits Box paint; its raster stubs stand in for a host.
-shape=kryon/raster_shape
-"$ziran" bundle --project \
-    --bind "$shape:RasterRoundedRectangle=navigation_test:RasterRoundedRectangle" \
-    --bind "$shape:RasterRoundedRectangleOutline=navigation_test:RasterRoundedRectangleOutline" \
-    --entry navigation_test:main -o build/navigation-test.zx tests/navigation_test.zi
-"$ziran" run --project build/navigation-test.zx
-echo "Game2D source, native, portable, and raylib ABI checks passed"
+sh tests/swipe_result_test.sh
+echo "Game2D local source, native, portable, and raylib ABI tests passed"

@@ -1,4 +1,4 @@
-// Shared control selection and continuous touch steering for game apps.
+// Shared control selection and touch steering for game apps.
 // All copy is caller-owned so consumers can supply their own translations.
 #import "kryon/session"
 #import "kryon/geometry"
@@ -13,13 +13,32 @@
 #import "kryon/text_align"
 #import "kryon/direction_pad"
 Math :: #import "std/math"
-GameSwipe :: struct { active: bool; x: float32; y: float32; direction: s32 }
-// Re-anchor after each accepted turn, as a finger follows successive corners.
+GameSwipe :: struct {
+    active: bool
+    x: float32
+    y: float32
+    direction: s32
+    // Per sample: an accepted crossing, even if direction did not change.
+    step: bool
+    // Gesture-wide: at least one crossing has been accepted.
+    moved: bool
+    // Per sample: release of a press that never crossed the threshold.
+    tapped: bool
+}
+// Returns the retained direction (0 left, 1 up, 2 right, 3 down; -1 idle).
+// Read state.step for discrete movement; each crossing re-anchors the gesture.
+// Sample once per input frame. Reset to GameSwipe.{} on cancellation/navigation
+// rather than sending a release: a cancelled press must not produce a tap.
 GameSwipeDirection :: (state: *GameSwipe, down: bool, x: float32, y: float32,
     minimum: float32 = 6.0) -> s32 {
-    if !down { state.active = false; state.direction = -1; return -1 }
+    state.step = false; state.tapped = false
+    if !down {
+        state.tapped = state.active && !state.moved
+        state.active = false; state.moved = false; state.direction = -1
+        return -1
+    }
     if !state.active {
-        state.active = true; state.x = x; state.y = y
+        state.active = true; state.moved = false; state.x = x; state.y = y
         state.direction = -1
         return -1
     }
@@ -30,6 +49,7 @@ GameSwipeDirection :: (state: *GameSwipe, down: bool, x: float32, y: float32,
     if minimum <= 0.0 { minimum = 6.0 }
     if across < minimum && along < minimum { return state.direction }
     state.x = x; state.y = y
+    state.step = true; state.moved = true
     state.direction = ifx across >= along then (ifx dx < 0.0 then 0 else 2) else (ifx dy < 0.0 then 1 else 3)
     return state.direction
 }

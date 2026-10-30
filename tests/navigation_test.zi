@@ -43,11 +43,38 @@ main :: () -> s32 {
     unused GameNavigationBack(*state)
     if !Expect(state.page == GAME_TITLE && !GameNavigationBack(*state), "settings returns to title; title does not trap Back") { return 1 }
     swipe: GameSwipe
-    if !Expect(GameSwipeDirection(*swipe, true, 20.0, 20.0) == -1, "press does not invent a direction") { return 1 }
-    if !Expect(GameSwipeDirection(*swipe, true, 40.0, 20.0) == 2, "swipe right") { return 1 }
-    if !Expect(GameSwipeDirection(*swipe, true, 40.0, 22.0) == 2, "held direction ignores jitter") { return 1 }
-    if !Expect(GameSwipeDirection(*swipe, true, 40.0, 2.0) == 1, "re-anchor allows a corner") { return 1 }
-    if !Expect(GameSwipeDirection(*swipe, false, 40.0, 2.0) == -1, "release stops movement") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 20.0, 20.0) == -1 && swipe.active && !swipe.step && !swipe.moved && !swipe.tapped, "press does not invent movement") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 25.0, 25.0) == -1 && !swipe.step && !swipe.moved, "both axes below threshold ignore jitter") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 26.0, 20.0) == 2 && swipe.step && swipe.moved && !swipe.tapped, "exact threshold accepts first right step") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 32.0, 20.0) == 2 && swipe.step && swipe.x == 32.0, "same direction crossing after reanchor is another event") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 32.0, 22.0) == 2 && !swipe.step && swipe.moved, "held direction ignores jitter without repeating a step") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 32.0, 22.0) == 2 && !swipe.step, "stationary held frame has no event") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 32.0, 14.0) == 1 && swipe.step, "reanchor allows an upward corner") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 26.0, 14.0) == 0 && swipe.step, "left corner") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 26.0, 20.0) == 3 && swipe.step, "down corner") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, false, 26.0, 20.0) == -1 && !swipe.active && !swipe.step && !swipe.moved && !swipe.tapped, "moved release stops movement without tapping") { return 1 }
+    unused GameSwipeDirection(*swipe, true, 50.0, 50.0)
+    unused GameSwipeDirection(*swipe, true, 55.0, 54.0)
+    if !Expect(GameSwipeDirection(*swipe, false, 55.0, 54.0) == -1 && swipe.tapped && !swipe.step, "subthreshold release is a tap without movement") { return 1 }
+    unused GameSwipeDirection(*swipe, false, 55.0, 54.0)
+    if !Expect(!swipe.tapped && !swipe.step, "release events last one sample") { return 1 }
+    unused GameSwipeDirection(*swipe, true, 10.0, 10.0)
+    swipe = GameSwipe.{}
+    unused GameSwipeDirection(*swipe, false, 10.0, 10.0)
+    if !Expect(!swipe.tapped && !swipe.step && !swipe.active, "cancel discards a possible tap") { return 1 }
+    unused GameSwipeDirection(*swipe, true, 0.0, 0.0)
+    unused GameSwipeDirection(*swipe, true, 6.0, 0.0)
+    unused GameNavigationPlay(*state)
+    GameNavigationPause(*state)
+    if !Expect(state.page == GAME_PAUSED, "navigation leaves play before input reset") { return 1 }
+    swipe = GameSwipe.{}
+    GameNavigationResume(*state)
+    if !Expect(GameSwipeDirection(*swipe, true, 100.0, 100.0) == -1 && !swipe.step && !swipe.moved, "navigation reset starts a fresh anchor without a stale step") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 106.0, 106.0, 0.0) == 2 && swipe.step, "default threshold fallback and horizontal tie break") { return 1 }
+    unused GameSwipeDirection(*swipe, false, 106.0, 106.0)
+    unused GameSwipeDirection(*swipe, true, 0.0, 0.0, 12.0)
+    if !Expect(GameSwipeDirection(*swipe, true, 11.0, 0.0, 12.0) == -1 && !swipe.step, "caller threshold suppresses smaller movements") { return 1 }
+    if !Expect(GameSwipeDirection(*swipe, true, 12.0, 0.0, 12.0) == 2 && swipe.step, "caller threshold accepts exact crossing") { return 1 }
     stick: GameStick
     if !Expect(!GameStickIndicatorPlace(stick, 0.0, 0.0).visible, "no indicator without a press") { return 1 }
     if !Expect(!GameStickSteer(*stick, true, 100.0, 100.0).steering, "a press alone does not steer") { return 1 }
