@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve the surrounding game theme when nested controls finish drawing.
+
 - Swipe steering exposes accepted-step and tap events separately from retained direction.
 
 - A floating touch stick steers in any direction and shows a high-contrast anchor, finger and heading while held.
