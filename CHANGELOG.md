@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Built on Kryon b9aed758, the Kryon the CSS style package installs into.
+
 - Preserve the surrounding game theme when nested controls finish drawing.
 
 - Swipe steering exposes accepted-step and tap events separately from retained direction.
