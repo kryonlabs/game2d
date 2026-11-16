@@ -4,11 +4,11 @@ module_roots = ["src", "tests"]
 
 [toolchain]
 git = "https://github.com/ziranlang/ziran.git"
-ref = "9524616df1a1b6e63a3789b3aea055714a526c88"
+ref = "d17c7aa1e093066ef03f307a45f6966dd9b29d4b"
 
 [dependencies.kryon]
 git = "https://github.com/kryonlabs/kryon.git"
-ref = "b9aed7589e9af2935a9cd9cb260e72944c195762"
+ref = "1b290f19aa1a4069c908a4687f04458c58a2b658"
 
 [exports]
 Game2D = "src/Game2D/module.zi"

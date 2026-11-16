@@ -2,16 +2,13 @@
 // All copy is caller-owned so consumers can supply their own translations.
 #import "kryon/session"
 #import "kryon/geometry"
-#import "kryon/box_props"
-#import "kryon/box_widget"
+Box :: #import "kryon/box"
 #import "kryon/drawing_props"
-#import "kryon/button_props"
 #import "kryon/control_props"
-#import "kryon/button_widget"
-#import "kryon/text_props"
-#import "kryon/text_widget"
+Button :: #import "kryon/button"
+Text :: #import "kryon/text"
 #import "kryon/text_align"
-#import "kryon/direction_pad"
+DirectionPad :: #import "kryon/direction_pad"
 Math :: #import "std/math"
 GameSwipe :: struct {
     active: bool
@@ -122,23 +119,23 @@ GameStickIndicatorPaint :: (session: Session, key: u64, layout: GameStickIndicat
     edge: float32 = 3.0
     rim := Rectangle.{layout.ring.x + edge, layout.ring.y + edge,
         layout.ring.width - edge * 2.0, layout.ring.height - edge * 2.0}
-    unused Box(session, BoxProps.{.key = key, .bounds = layout.ring,
+    unused Box.Draw(session, Box.Props.{.key = key, .bounds = layout.ring,
         .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.ring.width * .5})
-    unused Box(session, BoxProps.{.key = key + 1, .bounds = rim,
+    unused Box.Draw(session, Box.Props.{.key = key + 1, .bounds = rim,
         .fill = ColorFromPacked(0x081d29d8), .radius = rim.width * .5})
     if layout.pip.width > 0.0 {
         pip_inner := Rectangle.{layout.pip.x + edge * .5, layout.pip.y + edge * .5,
             layout.pip.width - edge, layout.pip.height - edge}
-        unused Box(session, BoxProps.{.key = key + 2, .bounds = layout.pip,
+        unused Box.Draw(session, Box.Props.{.key = key + 2, .bounds = layout.pip,
             .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.pip.width * .5})
-        unused Box(session, BoxProps.{.key = key + 3, .bounds = pip_inner,
+        unused Box.Draw(session, Box.Props.{.key = key + 3, .bounds = pip_inner,
             .fill = ColorFromPacked(0x081d29e6), .radius = pip_inner.width * .5})
     }
     finger_inner := Rectangle.{layout.finger.x + edge * .5, layout.finger.y + edge * .5,
         layout.finger.width - edge, layout.finger.height - edge}
-    unused Box(session, BoxProps.{.key = key + 4, .bounds = layout.finger,
+    unused Box.Draw(session, Box.Props.{.key = key + 4, .bounds = layout.finger,
         .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.finger.width * .5})
-    unused Box(session, BoxProps.{.key = key + 5, .bounds = finger_inner,
+    unused Box.Draw(session, Box.Props.{.key = key + 5, .bounds = finger_inner,
         .fill = ColorFromPacked(0x081d29e6), .radius = finger_inner.width * .5})
 }
 GameControlsProps :: struct {
@@ -180,30 +177,30 @@ GameControlsChoice :: (session: Session, props: GameControlsProps) -> s32 {
     if height > 360.0 { height = 360.0 }
     card := Rectangle.{props.bounds.x + (props.bounds.width - width) * .5,
         props.bounds.y + (props.bounds.height - height) * .5, width, height}
-    unused Box(session, BoxProps.{.key = props.key, .bounds = card,
+    unused Box.Draw(session, Box.Props.{.key = props.key, .bounds = card,
         .fill = ColorFromPacked(0x112a3bee), .border = ColorFromPacked(0x80cbd8ff), .radius = 24.0})
-    unused Text(session, TextProps.{.key = props.key + 1, .text = props.title,
+    unused Text.Draw(session, Text.Props.{.key = props.key + 1, .text = props.title,
         .bounds = Rectangle.{card.x + 16.0, card.y + 18.0, width - 32.0, 36.0},
-        .font = 23, .align = TextAlign.TextAlignCenter})
+        .size = 23, .align = TextAlign.TextAlignCenter})
     tile_width := (width - 48.0) * .5
     tile_height := height - 92.0
     for index: 0..1 {
         tile := Rectangle.{card.x + 16.0 + cast(float32)index * (tile_width + 16.0),
             card.y + 68.0, tile_width, tile_height}
-        unused Box(session, BoxProps.{.key = props.key + 2 + cast(u64)index, .bounds = tile,
+        unused Box.Draw(session, Box.Props.{.key = props.key + 2 + cast(u64)index, .bounds = tile,
             .fill = ColorFromPacked(0x051922ee), .radius = 16.0})
         preview := Rectangle.{tile.x + 16.0, tile.y + 10.0, tile.width - 32.0, tile.height - 72.0}
         if index == 0 {
             GameSwipePreview(session, props.key + 4, preview, props.now)
-            if Button(session, ButtonProps.{.key = props.key + 32,
+            if Button.Draw(session, Button.Props.{.key = props.key + 32,
                 .id = cast(s32)props.key + 32, .bounds = preview, .label = props.swipe_label,
                 .selected = props.selected == 0, .invisible = true}) != 0 { return 0 }
         } else {
-            pad := DirectionPad(session, DirectionPadProps.{.key = props.key + 10,
+            pad := DirectionPad.Draw(session, DirectionPad.Props.{.key = props.key + 10,
                 .bounds = preview, .label = props.pad_label, .now = props.now})
             if pad.step { return 1 }
         }
-        if Button(session, ButtonProps.{.key = props.key + 30 + cast(u64)index,
+        if Button.Draw(session, Button.Props.{.key = props.key + 30 + cast(u64)index,
             .id = cast(s32)props.key + 30 + cast(s32)index,
             .bounds = Rectangle.{tile.x + 8.0, tile.y + tile.height - 56.0, tile.width - 16.0, 44.0},
             .label = ifx index == 0 then props.swipe_label else props.pad_label,
