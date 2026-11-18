@@ -366,6 +366,10 @@ fixed_frame: float32;
 fixed_elapsed: float64;
 random_state: u64 = 0x853c49e6748fea9b;
 audio_open: bool;
+// The present waits for the display when vsync is on, so a target at the
+// display's rate needs no second wait.
+vsync_active: bool;
+refresh_rate: s32;
 pads: [GAMEPADS]*void;
 pad_down: [GAMEPADS][PAD_BUTTONS]bool;
 pad_pressed: [GAMEPADS][PAD_BUTTONS]bool;
@@ -791,6 +795,10 @@ InitWindow :: (width: s32, height: s32, title: string) {
     renderer = SdlCreateRenderer(window, -1, cast(u32)(2 | 8) | vsync)
     if renderer == null { renderer = SdlCreateRenderer(window, -1, cast(u32)(1 | 8) | vsync) }
     if renderer == null { SdlDestroyWindow(window); window = null; return }
+    vsync_active = vsync != cast(u32)0
+    refresh_mode: DisplayMode
+    display := SdlWindowDisplay(window)
+    refresh_rate = ifx display >= 0 && SdlDisplayMode(display, *refresh_mode) == 0 then refresh_mode.refresh_rate else 0
     unused SdlDrawBlend(renderer, SDL_BLEND)
     white = SdlCreateTexture(renderer, cast(u32)RGBA, ACCESS_STATIC, 1, 1)
     if white != null {
@@ -918,8 +926,8 @@ BeginDrawing :: () {
     if renderer != null { unused SdlTarget(renderer, null); ApplyScissor() }
 }
 
-// Shows the frame, waits for the target rate and reads the input the next
-// frame sees.
+// Shows the frame, waits for the target rate (unless vsync already paces it
+// at that rate) and reads the input the next frame sees.
 EndDrawing :: () {
     if renderer != null { SdlPresent(renderer) }
     frames += cast(u64)1
@@ -927,7 +935,8 @@ EndDrawing :: () {
         fixed_elapsed += cast(float64)fixed_frame
         frame_previous = SdlCounter()
     } else {
-        if target_fps > 0 && GAME2D_WEB == 0 {
+        paced_by_display := vsync_active && (refresh_rate <= 0 || target_fps >= refresh_rate - 1)
+        if target_fps > 0 && GAME2D_WEB == 0 && !paced_by_display {
             deadline := frame_previous + time_frequency / cast(u64)target_fps
             now := SdlCounter()
             if now < deadline {

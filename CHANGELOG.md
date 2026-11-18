@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `Game2D/Sdl` no longer waits for the target frame rate when vsync already presents at that rate: the two waits made frames slip a vsync (30 fps on a Pixel 4a, 18 on a Moto e6 play).
+
 - `Game2D/Sdl` runs on Android under SDL2's activity (`PLATFORM_ANDROID`): `InitWindow(0, 0)` fills the display, pictures decode as PNG in Ziran and text draws with FreeType.
 
 - `Game2D/Sdl` draws its text with FreeType on Windows and Android (`sdl_text_freetype`), in the system's sans-serif face or the font file `GAME2D_FONT` names, so a static Windows build needs no Pango or Cairo.
