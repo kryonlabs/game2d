@@ -2,13 +2,13 @@
 // All copy is caller-owned so consumers can supply their own translations.
 #import "kryon/session"
 #import "kryon/geometry"
-Box :: #import "kryon/box"
+Box :: #import "kryon/box";
+Button :: #import "kryon/button";
+Text :: #import "kryon/text";
+DirectionPad :: #import "kryon/direction_pad";
 #import "kryon/drawing_props"
 #import "kryon/control_props"
-Button :: #import "kryon/button"
-Text :: #import "kryon/text"
 #import "kryon/text_align"
-DirectionPad :: #import "kryon/direction_pad"
 Math :: #import "std/math"
 GameSwipe :: struct {
     active: bool
