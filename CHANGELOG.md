@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- `Game2D/Sdl` builds for the browser (`PLATFORM_WEB` with Emscripten's SDL2 port and Ziran's `web/ziran_web.js`): PNG pictures decode in Ziran, text draws on the page's canvas (`sdl_text_web`), the browser paces frames, and WebAudio starts with the first key or button press. The desktop text moved to `sdl_text_pango`.
+- `Game2D/Sdl` builds for the browser (`PLATFORM_WEB` with Emscripten's SDL2 port and Ziran's `web/ziran_web.js`): PNG pictures decode in Ziran, text draws on the page's canvas (`sdl_text_web`), the browser paces frames, and WebAudio starts with the first key or button press. The desktop text moved to `sdl_text_pango`. `malloc` and `memcpy` take `size_t`, so wasm32 builds no longer trap on their first allocation.
 
 - `Game2D/Sdl` draws its text with Pango and Cairo itself (`sdl_text`) instead of importing Kryon's Cairo window raster, so a game that paints Kryon widgets through its own `Raster*` calls links without duplicate symbols, and games no longer carry Kryon's window raster.
 

@@ -274,9 +274,12 @@ SdlPadClose :: (pad: *void) #foreign sdl "SDL_GameControllerClose";
 SdlPadAttached :: (pad: *void) -> s32 #foreign sdl "SDL_GameControllerGetAttached";
 SdlPadButton :: (pad: *void, button: s32) -> u8 #foreign sdl "SDL_GameControllerGetButton";
 SdlPadAxis :: (pad: *void, axis: s32) -> s16 #foreign sdl "SDL_GameControllerGetAxis";
-Allocate :: (size: u64) -> *void #foreign libc "malloc";
+// size_t is 32 bits in the browser's wasm32 and 64 on the desktop.
+AllocateRaw :: (size: usize) -> *void #foreign libc "malloc";
 Free :: (value: *void) #foreign libc "free";
-Copy :: (output: *void, input: *void, count: u64) -> *void #foreign libc "memcpy";
+CopyRaw :: (output: *void, input: *void, count: usize) -> *void #foreign libc "memcpy";
+Allocate :: (size: u64) -> *void { return AllocateRaw(cast(usize)size) }
+Copy :: (output: *void, input: *void, count: u64) -> *void { return CopyRaw(output, input, cast(usize)count) }
 SinRaw :: (value: float32) -> float32 #foreign libm "sinf";
 CosRaw :: (value: float32) -> float32 #foreign libm "cosf";
 SqrtRaw :: (value: float32) -> float32 #foreign libm "sqrtf";
