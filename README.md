@@ -42,7 +42,9 @@ with `--use-preload-plugins` so the browser decodes preloaded ones), text
 draws on the page's canvas, the browser paces frames, and audio plays through
 WebAudio once the player has pressed a key or button.
 
-On Windows and Android the text draws with FreeType (link `-lfreetype`) in
+On Android the game runs in SDL2's activity with `PLATFORM_ANDROID` defined:
+`InitWindow(0, 0)` fills the display and pictures are PNG files. On Windows
+and Android the text draws with FreeType (link `-lfreetype`) in
 the system's sans-serif face, or the font file `GAME2D_FONT` names. `LoadImageFromMemory` reads PNG bytes; other
 formats load from files with `LoadImage`.
 Run `ziran update` to refresh all packages, or `ziran update Game2D` to refresh

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `Game2D/Sdl` runs on Android under SDL2's activity (`PLATFORM_ANDROID`): `InitWindow(0, 0)` fills the display, pictures decode as PNG in Ziran and text draws with FreeType.
+
 - `Game2D/Sdl` draws its text with FreeType on Windows and Android (`sdl_text_freetype`), in the system's sans-serif face or the font file `GAME2D_FONT` names, so a static Windows build needs no Pango or Cairo.
 
 - `Game2D/Sdl` builds for the browser (`PLATFORM_WEB` with Emscripten's SDL2 port and Ziran's `web/ziran_web.js`): PNG pictures decode in Ziran, text draws on the page's canvas (`sdl_text_web`), the browser paces frames, and WebAudio starts with the first key or button press. The desktop text moved to `sdl_text_pango`. `malloc` and `memcpy` take `size_t`, so wasm32 builds no longer trap on their first allocation. A page linked with `--use-preload-plugins` reads the pictures the browser decoded before `main`, so large sprite sets load without blocking the page.

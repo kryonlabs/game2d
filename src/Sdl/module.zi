@@ -14,8 +14,12 @@ using Drawing :: #import "kryon/drawing_props";
 // In the browser (an Emscripten build with PLATFORM_WEB) pictures are PNG
 // files decoded here, text draws on the page's canvas, the browser paces
 // frames and audio plays through WebAudio once the player has interacted.
+// On Android (SDL2's activity, PLATFORM_ANDROID) pictures are PNG files
+// decoded here too and text draws with FreeType.
 #if OS == .WEB || #defined(PLATFORM_WEB) {
     GAME2D_WEB :: 1;
+} else #if OS == .ANDROID || #defined(PLATFORM_ANDROID) || #defined(ANDROID_BUILD) {
+    GAME2D_WEB :: 0;
 } else {
     GAME2D_WEB :: 0;
     Pixels :: #import "kryon/image_pixels";
@@ -531,8 +535,8 @@ Interacted :: () {
     }
 }
 
-// A picture file as straight RGBA: PNG in the browser, any format Kryon
-// decodes elsewhere. The caller frees its pixels.
+// A picture file as straight RGBA: PNG in the browser and on Android, any
+// format Kryon decodes elsewhere. The caller frees its pixels.
 DecodePicture :: (path: string) -> Pictures.Image {
     #if OS == .WEB || #defined(PLATFORM_WEB) {
         // A page linked with --use-preload-plugins has the browser decode
@@ -553,13 +557,19 @@ DecodePicture :: (path: string) -> Pictures.Image {
                 VecFree(picture.pixels)
             }
         }
-        encoded: Vec(u8)
-        defer VecFree(encoded)
-        if !ReadFileInto(path, *encoded) || encoded.count == 0 { return .{} }
-        return Png.ReadPNG(encoded[:])
+        return DecodePngFile(path)
+    } else #if OS == .ANDROID || #defined(PLATFORM_ANDROID) || #defined(ANDROID_BUILD) {
+        return DecodePngFile(path)
     } else {
         return Pixels.LoadImagePixels(path)
     }
+}
+
+DecodePngFile :: (path: string) -> Pictures.Image {
+    encoded: Vec(u8)
+    defer VecFree(encoded)
+    if !ReadFileInto(path, *encoded) || encoded.count == 0 { return .{} }
+    return Png.ReadPNG(encoded[:])
 }
 
 // The active 2D camera's view of a world point.
@@ -757,15 +767,23 @@ Decode :: (bytes: []u8) -> Wave {
 // Window and frames.
 SetConfigFlags :: (flags: u32) { config_flags = flags }
 
+// A width or height of 0 fills the display, as phones run games.
 InitWindow :: (width: s32, height: s32, title: string) {
-    if window != null || width <= 0 || height <= 0 { return }
+    if window != null || width < 0 || height < 0 { return }
     if SdlInit(cast(u32)INIT_VIDEO) != 0 { return }
+    fill := width == 0 || height == 0
+    if fill {
+        mode: DisplayMode
+        if SdlDisplayMode(0, *mode) != 0 || mode.w <= 0 || mode.h <= 0 { SdlQuit(cast(u32)INIT_VIDEO); return }
+        width = mode.w; height = mode.h
+    }
     // Gamepads are optional: a system without them still opens the window.
     unused SdlInit(cast(u32)INIT_GAMECONTROLLER)
     name: [256]u8
     if !CopyCString(title, name[:]) { return }
     flags := ifx (config_flags & cast(u32)FLAG_WINDOW_HIDDEN) != cast(u32)0 then cast(u32)0x8 else cast(u32)0x4
     if (config_flags & cast(u32)FLAG_WINDOW_RESIZABLE) != cast(u32)0 { flags |= cast(u32)0x20 }
+    if fill { flags |= cast(u32)FULLSCREEN_DESKTOP }
     window = SdlCreateWindow(*name[0], cast(s32)0x2FFF0000, cast(s32)0x2FFF0000, width, height, flags)
     if window == null { return }
     vsync := ifx (config_flags & cast(u32)FLAG_VSYNC_HINT) != cast(u32)0 then cast(u32)4 else cast(u32)0
