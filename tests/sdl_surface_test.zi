@@ -16,6 +16,13 @@ Push :: (event: *void) -> s32 #foreign sdl "SDL_PushEvent";
 Counter :: () -> u64 #foreign sdl "SDL_GetPerformanceCounter";
 Frequency :: () -> u64 #foreign sdl "SDL_GetPerformanceFrequency";
 
+// A game that draws Kryon widgets supplies their raster calls with Game2D's
+// drawing; Game2D itself must not bring in a second definition.
+#program_export "RasterText"
+RasterText :: (value: string, x: s32, y: s32, font: s32, color: Color) {
+    DrawText(value, x, y, font, color)
+}
+
 Event :: struct {
     kind: u32
     timestamp: u32

@@ -1,0 +1,160 @@
+// Game2D's text: Pango lays out and Cairo rasterizes white lettering in
+// Liberation Sans (or what fontconfig finds for that name), smoothed in gray
+// and unhinted, as Kryon's hosts set their text. A line of size N is about N
+// pixels tall. Loaded into the Sdl module, which tints the lettering when it
+// draws it.
+#import "std/c_string"
+#import "std/vec"
+
+#scope_file
+cairo :: #system_library "cairo";
+pango :: #system_library "pango-1.0";
+pango_cairo :: #system_library "pangocairo-1.0";
+gobject :: #system_library "gobject-2.0";
+
+ImageSurfaceCreate :: (format: s32, width: s32, height: s32) -> *void #foreign cairo "cairo_image_surface_create";
+SurfaceDestroy :: (surface: *void) #foreign cairo "cairo_surface_destroy";
+SurfaceFlush :: (surface: *void) #foreign cairo "cairo_surface_flush";
+SurfaceData :: (surface: *void) -> *u8 #foreign cairo "cairo_image_surface_get_data";
+SurfaceStride :: (surface: *void) -> s32 #foreign cairo "cairo_image_surface_get_stride";
+CairoCreate :: (surface: *void) -> *void #foreign cairo "cairo_create";
+CairoDestroy :: (context: *void) #foreign cairo "cairo_destroy";
+CairoStatus :: (context: *void) -> s32 #foreign cairo "cairo_status";
+SourceRgba :: (context: *void, r: float64, g: float64, b: float64, a: float64) #foreign cairo "cairo_set_source_rgba";
+MoveTo :: (context: *void, x: float64, y: float64) #foreign cairo "cairo_move_to";
+OptionsCreate :: () -> *void #foreign cairo "cairo_font_options_create";
+OptionsDestroy :: (options: *void) #foreign cairo "cairo_font_options_destroy";
+OptionsAntialias :: (options: *void, antialias: s32) #foreign cairo "cairo_font_options_set_antialias";
+OptionsHintStyle :: (options: *void, style: s32) #foreign cairo "cairo_font_options_set_hint_style";
+OptionsHintMetrics :: (options: *void, metrics: s32) #foreign cairo "cairo_font_options_set_hint_metrics";
+LayoutCreate :: (context: *void) -> *void #foreign pango_cairo "pango_cairo_create_layout";
+LayoutShow :: (context: *void, layout: *void) #foreign pango_cairo "pango_cairo_show_layout";
+ContextOptions :: (context: *void, options: *void) #foreign pango_cairo "pango_cairo_context_set_font_options";
+LayoutContext :: (layout: *void) -> *void #foreign pango "pango_layout_get_context";
+LayoutChanged :: (layout: *void) #foreign pango "pango_layout_context_changed";
+LayoutFont :: (layout: *void, description: *void) #foreign pango "pango_layout_set_font_description";
+LayoutText :: (layout: *void, text: *u8, length: s32) #foreign pango "pango_layout_set_text";
+LayoutPixelSize :: (layout: *void, width: *s32, height: *s32) #foreign pango "pango_layout_get_pixel_size";
+FontNew :: () -> *void #foreign pango "pango_font_description_new";
+FontFree :: (description: *void) #foreign pango "pango_font_description_free";
+FontFamily :: (description: *void, family: *u8) #foreign pango "pango_font_description_set_family";
+FontAbsoluteSize :: (description: *void, size: float64) #foreign pango "pango_font_description_set_absolute_size";
+ObjectUnref :: (object: *void) #foreign gobject "g_object_unref";
+
+PANGO_SCALE :: 1024.0;
+TEXT_BYTES :: 4096;
+
+measure_surface: *void;
+measure_context: *void;
+layout: *void;
+font: *void;
+// Pixels of size for each pixel of line height, from one sample line.
+size_per_line: float64;
+text_bytes: [TEXT_BYTES + 1]u8;
+
+// Gray anti-aliasing, no hinting, unhinted metrics.
+SetOptions :: (layout: *void) {
+    options := OptionsCreate()
+    if options == null { return }
+    OptionsAntialias(options, 2)
+    OptionsHintStyle(options, 1)
+    OptionsHintMetrics(options, 1)
+    ContextOptions(LayoutContext(layout), options)
+    LayoutChanged(layout)
+    OptionsDestroy(options)
+}
+
+// Lays out VALUE at about SIZE pixels a line.
+Shape :: (target: *void, value: string, size: s32) -> bool {
+    if value.count > TEXT_BYTES { return false }
+    FontAbsoluteSize(font, cast(float64)size * size_per_line * PANGO_SCALE)
+    LayoutFont(target, font)
+    for at: cast(s64)0..value.count - 1 { text_bytes[at] = value[at] }
+    text_bytes[value.count] = 0
+    LayoutText(target, *text_bytes[0], cast(s32)value.count)
+    return true
+}
+
+#scope_export
+// Opens the layout with the first text; false without Pango or Cairo.
+TextOpen :: () -> bool {
+    if layout != null { return true }
+    measure_surface = ImageSurfaceCreate(0, 1, 1)
+    if measure_surface == null { return false }
+    measure_context = CairoCreate(measure_surface)
+    if measure_context == null || CairoStatus(measure_context) != 0 { TextClose(); return false }
+    layout = LayoutCreate(measure_context)
+    font = FontNew()
+    if layout == null || font == null { TextClose(); return false }
+    family: [32]u8
+    unused CopyCString("Liberation Sans", family[:])
+    FontFamily(font, *family[0])
+    SetOptions(layout)
+    size_per_line = 1.0
+    if !Shape(layout, "Mg", 100) { TextClose(); return false }
+    width: s32 = 0; height: s32 = 0
+    LayoutPixelSize(layout, *width, *height)
+    if height > 0 { size_per_line = 100.0 / cast(float64)height }
+    return true
+}
+
+TextClose :: () {
+    if layout != null { ObjectUnref(layout) }
+    layout = null
+    if font != null { FontFree(font) }
+    font = null
+    if measure_context != null { CairoDestroy(measure_context) }
+    measure_context = null
+    if measure_surface != null { SurfaceDestroy(measure_surface) }
+    measure_surface = null
+}
+
+// VALUE's width and line height at SIZE in pixels; 0 when it cannot be laid out.
+TextMeasure :: (value: string, size: s32) -> (width: s32, height: s32) {
+    if size <= 0 || !TextOpen() || !Shape(layout, value, size) { return 0, 0 }
+    width: s32 = 0; height: s32 = 0
+    LayoutPixelSize(layout, *width, *height)
+    return width, height
+}
+
+// White lettering of VALUE on a transparent WIDTH by HEIGHT picture of
+// straight RGBA, from its top left.
+TextPixels :: (value: string, size: s32, width: s32, height: s32, pixels: []u8) -> bool {
+    if width <= 0 || height <= 0 || pixels.count < cast(s64)width * cast(s64)height * 4 { return false }
+    if !TextOpen() { return false }
+    target := ImageSurfaceCreate(0, width, height)
+    if target == null { return false }
+    context := CairoCreate(target)
+    drawn := context != null && CairoStatus(context) == 0
+    if drawn {
+        lines := LayoutCreate(context)
+        drawn = lines != null
+        if drawn {
+            SetOptions(lines)
+            drawn = Shape(lines, value, size)
+            if drawn {
+                MoveTo(context, 0.0, 0.0)
+                SourceRgba(context, 1.0, 1.0, 1.0, 1.0)
+                LayoutShow(context, lines)
+            }
+            ObjectUnref(lines)
+        }
+    }
+    if context != null { CairoDestroy(context) }
+    if drawn {
+        SurfaceFlush(target)
+        // White lettering: Cairo's premultiplied words carry only coverage.
+        data := SurfaceData(target)
+        stride := cast(s64)SurfaceStride(target)
+        for y: cast(s64)0..height - 1 {
+            for x: cast(s64)0..width - 1 {
+                alpha := (cast(*u32)*data[y * stride + x * 4]).* >> 24
+                at := (y * width + x) * 4
+                pixels[at] = 255; pixels[at + 1] = 255; pixels[at + 2] = 255
+                pixels[at + 3] = cast(u8)alpha
+            }
+        }
+    }
+    SurfaceDestroy(target)
+    return drawn
+}

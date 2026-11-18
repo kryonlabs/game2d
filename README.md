@@ -8,7 +8,7 @@ the game reads keyboard, mouse, touch and gamepad input, loads pictures,
 textures and render targets, draws shapes and text, and plays sounds and music with the call names
 games already use (`InitWindow`, `BeginDrawing`, `DrawTexturePro`,
 `PlaySound`...). Pictures decode through Kryon's `image_pixels`, text draws
-with Kryon's text raster, and audio mixes in Ziran's `std/audio`. Kryon keeps
+with Pango and Cairo, and audio mixes in Ziran's `std/audio`. Kryon keeps
 its UI geometry, drawing primitives and widgets.
 
 `game2d/navigation` owns the portable title/play/pause/settings/control-choice
@@ -18,8 +18,10 @@ DirectionPad and buttons. Callers supply translated labels, persist their
 chosen mode, and retain their own game rules, title artwork and account actions.
 Neither module depends on a publisher, account service or game catalog.
 
-`Sdl` links SDL2, zlib for PNG bytes and, for text, Kryon's Cairo/Pango raster
-(`pkg-config --libs sdl2 zlib cairo pangocairo fontconfig freetype2 glib-2.0`). It reads WAV; a game that
+`Sdl` links SDL2, zlib for PNG bytes and, for text, Pango and Cairo
+(`pkg-config --libs sdl2 zlib cairo pangocairo glib-2.0`). It does not bring in
+Kryon's Cairo window raster, so a game that draws Kryon widgets supplies the
+`Raster*` functions they paint through, drawing with these same calls. It reads WAV; a game that
 ships Ogg Vorbis or MP3 also imports `std/audio_decode_vorbis` or
 `std/audio_decode_mp3` and links that codec, so a game carries only the decoders
 it uses. Render textures draw upright with a negative source height, as games

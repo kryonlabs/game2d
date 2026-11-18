@@ -4,7 +4,7 @@
 // plays sounds and music, with the call names games already use (InitWindow,
 // BeginDrawing, DrawTexturePro, PlaySound...). Pictures decode through
 // Kryon's image_pixels (PNG bytes through std/png_linux), text draws with
-// Kryon's text raster, and audio mixes in Ziran's std/audio. Color,
+// Pango and Cairo (sdl_text), and audio mixes in Ziran's std/audio. Color,
 // Texture2D, Vector2, Rectangle and Camera are Kryon's own types.
 #import "std/c_string"
 #import "std/file"
@@ -12,8 +12,7 @@
 using Geometry :: #import "kryon/geometry";
 using Drawing :: #import "kryon/drawing_props";
 Pixels :: #import "kryon/image_pixels";
-Text :: #import "kryon/text_pixels";
-Raster :: #import "kryon/Cairo";
+Lettering :: #import "sdl_text";
 Png :: #import "std/png_linux";
 Audio :: #import "std/audio";
 Sink :: #import "std/audio_sink";
@@ -328,7 +327,6 @@ should_close: bool;
 exit_key: s32 = 256;
 textures: [TEXTURES]TextureSlot;
 text_cache: [TEXT_CACHE]TextEntry;
-text_raster: bool;
 frames: u64;
 keys_down: [512]bool;
 keys_pressed: [512]bool;
@@ -602,11 +600,6 @@ TextureOf :: (id: u32, width: s32, height: s32) -> Texture2D {
     return .{id, width, height, 1, 7}
 }
 
-TextOpen :: () -> bool {
-    if !text_raster { text_raster = Raster.OpenRaster(1, 1) }
-    return text_raster
-}
-
 // A white rendering of `value` at `size`, cached and tinted when drawn.
 TextTexture :: (value: string, size: s32) -> *TextEntry {
     cacheable := value.count <= 256
@@ -619,14 +612,12 @@ TextTexture :: (value: string, size: s32) -> *TextEntry {
             if same { entry.used = frames; return entry }
         }
     }
-    if !TextOpen() { return null }
-    width := Raster.MeasureGlyphWidth(value, size, "")
-    height := Raster.MeasureGlyphLineHeight(size, "")
+    width, height := Lettering.TextMeasure(value, size)
     if width <= 0 || height <= 0 || width > 4096 || height > 4096 { return null }
     pixels: Vec(u8)
     defer VecFree(pixels)
     if !VecResize(pixels, cast(s64)width * cast(s64)height * 4) { return null }
-    if !Text.TextPixels(value, size, WHITE, width, height, pixels[:]) { return null }
+    if !Lettering.TextPixels(value, size, width, height, pixels[:]) { return null }
     handle := SdlCreateTexture(renderer, cast(u32)RGBA, ACCESS_STATIC, width, height)
     if handle == null { return null }
     unused SdlUpdateTexture(handle, null, cast(*void)*pixels[0], width * 4)
@@ -752,6 +743,7 @@ CloseWindow :: () {
         if text_cache[index].handle != null { SdlDestroyTexture(text_cache[index].handle); text_cache[index] = .{} }
     }
     if white != null { SdlDestroyTexture(white); white = null }
+    Lettering.TextClose()
     for slot: 0..GAMEPADS - 1 {
         if pads[slot] != null { SdlPadClose(pads[slot]); pads[slot] = null }
         for button: 0..PAD_BUTTONS - 1 { pad_down[slot][button] = false; pad_pressed[slot][button] = false }
@@ -1033,8 +1025,9 @@ DrawText :: (value: string, pos_x: s32, pos_y: s32, font_size: s32, color: Color
 }
 
 MeasureText :: (value: string, font_size: s32) -> s32 {
-    if value.count == 0 || font_size <= 0 || !TextOpen() { return 0 }
-    return Raster.MeasureGlyphWidth(value, font_size, "")
+    if value.count == 0 || font_size <= 0 { return 0 }
+    width, height := Lettering.TextMeasure(value, font_size)
+    return width
 }
 
 // Textures and render targets.
