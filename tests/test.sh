@@ -15,7 +15,7 @@ work=$(mktemp -d "$repo/work/test.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 "$ziran" check --project src/Game2D/module.zi
-"$ziran" check --project src/Raylib/module.zi
+"$ziran" check --project src/Sdl/module.zi
 "$ziran" build --project --target=c \
     -o "$work/c" tests/game2d_behavior.zi
 "${CC:-cc}" -std=c99 -I"$compiler/include" -I"$work/c" \
@@ -26,19 +26,6 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
     -o build/game2d-behavior.zx tests/game2d_behavior.zi
 "$ziran" run --project build/game2d-behavior.zx
 
-"$ziran" build --project --target=c -o build/raylib-c src/Raylib/module.zi
-"${CC:-cc}" -std=c11 -I"$compiler/include" -Ibuild/raylib-c \
-    -c build/raylib-c/Raylib.c -o build/Raylib.o
-
-raylib_header=${RAYLIB_HEADER_DIR:-$("$ziran" pkg path raylib $lock_flags --submodules)/src}
-if test -f "$raylib_header/raylib.h"; then
-    "${CC:-cc}" -std=c11 -DGENERATED -ffunction-sections \
-        -Wl,--gc-sections -I"$compiler/include" -Ibuild/raylib-c \
-        tests/raylib_wave_abi.c -o build/generated-abi
-    "${CC:-cc}" -std=c11 -I"$raylib_header" \
-        tests/raylib_wave_abi.c -o build/raylib-abi
-    test "$(build/generated-abi)" = "$(build/raylib-abi)"
-fi
-
+sh tests/sdl_surface_test.sh
 sh tests/swipe_result_test.sh
-echo "Game2D local source, native, portable, and raylib ABI tests passed"
+echo "Game2D local source, native, portable and SDL surface tests passed"

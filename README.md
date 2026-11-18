@@ -2,23 +2,32 @@
 
 Game2D is an optional Ziran package for 2D games that use Kryon. Kryon provides
 the shared `Rectangle` and `Circle` values. The `Game2D` module adds collision
-helpers. The `Raylib`
-module provides the existing raylib game API as a separate adapter. Kryon keeps
-its UI geometry, drawing primitives, widgets, and raylib UI host.
+helpers. The `Sdl` module is a game's window: SDL2 draws it with its
+accelerated renderer (or SDL's software renderer where there is no GPU), and
+the game reads keyboard, mouse and touch input, loads textures and render
+targets, draws shapes and text, and plays sounds and music with the call names
+games already use (`InitWindow`, `BeginDrawing`, `DrawTexturePro`,
+`PlaySound`...). Pictures decode through Kryon's `image_pixels`, text draws
+with Kryon's text raster, and audio mixes in Ziran's `std/audio`. Kryon keeps
+its UI geometry, drawing primitives and widgets.
 
 `game2d/navigation` owns the portable title/play/pause/settings/control-choice
 state machine. `game2d/controls` supplies `GameControlsChoice` and re-anchored
 `GameSwipeDirection` steering. The chooser uses Kryon's standard
 DirectionPad and buttons. Callers supply translated labels, persist their
 chosen mode, and retain their own game rules, title artwork and account actions.
-Neither module depends on a publisher, account service, game catalog or raylib.
+Neither module depends on a publisher, account service or game catalog.
 
-Kryon owns the raylib backend and its version. Game2D neither vendors nor
-builds raylib: its `Raylib` module binds to the C ABI of the raylib version
-selected by the Kryon dependency. Platform builds can obtain that exact source
-with `ziran pkg path kryon --locked --submodules`. Run `ziran update` to refresh
-all packages, or `ziran update Game2D` to refresh Game2D and its transitive
-Kryon dependency.
+`Sdl` links SDL2 and, for text, Kryon's Cairo/Pango raster (`pkg-config --libs
+sdl2 cairo pangocairo fontconfig freetype2 glib-2.0`). It reads WAV; a game that
+ships Ogg Vorbis or MP3 also imports `std/audio_decode_vorbis` or
+`std/audio_decode_mp3` and links that codec, so a game carries only the decoders
+it uses. Render textures draw upright with a negative source height, as games
+already draw them. `SetFixedFrameTime(seconds)` makes every frame last exactly
+that long for `GetFrameTime` and `GetTime`, for deterministic headless and
+replayed runs (SDL's `offscreen` or `dummy` video driver needs no display).
+Run `ziran update` to refresh all packages, or `ziran update Game2D` to refresh
+Game2D and its transitive Kryon dependency.
 
 ```toml
 [dependencies.Game2D]
@@ -26,10 +35,8 @@ git = "https://github.com/kryonlabs/game2d.git"
 ref = "master"
 ```
 
-Import the shared module with `using Game :: #import "Game2D";`. A native C or
-C++ game that uses raylib can additionally import `Raylib`. The raylib adapter
-uses raylib's C ABI and does not support native Go. Select and link a platform
-host in the application; a Ziran package does not install a renderer by itself.
+Import the shared module with `using Game :: #import "Game2D";`, and the window
+with `using Window :: #import "Game2D/Sdl";`.
 
 For local development, add an ignored `ziran.local.toml` with overrides for
 `Game2D`, `Kryon`, and `ziran` in the application. Commit `ziran.lock` for
@@ -63,4 +70,6 @@ Kryon retains DirectionPad, SwipeArea and pointer capture. Choano uses
 Run `env -u DISPLAY -u WAYLAND_DISPLAY sh tests/swipe_result_test.sh` for the
 navigation/control/floating-stick suite through native C and portable `.zx`
 from source and saved IR, plus an external public-import consumer. `make -j1 test`
-includes this suite and the existing geometry and raylib ABI local tests.
+includes this suite, the geometry tests and `tests/sdl_surface_test.sh`, which
+draws, reads input and plays audio through `Sdl` from source and saved IR on a
+private Xvfb with SDL's software renderer and dummy audio.

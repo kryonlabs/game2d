@@ -1,0 +1,1095 @@
+// SDL2 game surface for Ziran games on Kryon. A game opens a window drawn by
+// SDL's accelerated renderer, reads keyboard, mouse and touch input, loads
+// textures and render targets, draws shapes and text, and plays sounds and
+// music, with the call names games already use (InitWindow, BeginDrawing,
+// DrawTexturePro, PlaySound...). Pictures decode through Kryon's
+// image_pixels, text draws with Kryon's text raster, and audio mixes in
+// Ziran's std/audio. Color, Texture2D, Vector2, Rectangle and Camera are
+// Kryon's own types.
+#import "std/c_string"
+#import "std/file"
+#import "std/byte_text_linux"
+using Geometry :: #import "kryon/geometry";
+using Drawing :: #import "kryon/drawing_props";
+Pixels :: #import "kryon/image_pixels";
+Text :: #import "kryon/text_pixels";
+Raster :: #import "kryon/Cairo";
+Audio :: #import "std/audio";
+Sink :: #import "std/audio_sink";
+WavFile :: #import "std/audio_wav";
+AudioTypes :: #import "std/audio_types";
+// LoadSound and LoadMusicStream read WAV. A game that ships Ogg Vorbis or MP3
+// imports std/audio_decode_vorbis or std/audio_decode_mp3 as well and links
+// that codec; nothing is decoded that the game does not import.
+#import "std/audio_decode_wav"
+
+// Render targets, sounds, music and waves. A Texture2D or RenderTexture2D id
+// names this module's texture slot; 0 is none.
+RenderTexture2D :: struct {
+    id: u32
+    texture: Texture2D
+    depth: Texture2D
+}
+
+// Straight RGBA pixels a game owns, as LoadTextureFromImage reads them.
+// format 7 is 8-bit RGBA and 4 is 8-bit RGB.
+PixelImage :: struct {
+    data: *void
+    width: s32
+    height: s32
+    mipmaps: s32
+    format: s32
+}
+
+// 16-bit PCM frames.
+Wave :: struct {
+    frame_count: u32
+    sample_rate: u32
+    sample_size: u32
+    channels: u32
+    data: *void
+}
+
+Sound :: struct {
+    voice: Audio.AudioVoice
+    frame_count: u32
+}
+
+// Music loops unless the game clears `looping` before PlayMusicStream.
+Music :: struct {
+    voice: Audio.AudioVoice
+    frame_count: u32
+    looping: bool
+}
+
+// Keyboard keys, mouse buttons, texture filters, blend modes, window flags
+// and palette colors, with the values games already use.
+KEY_NULL :: 0;
+KEY_BACK :: 4;
+KEY_SPACE :: 32;
+KEY_A :: 65;
+KEY_D :: 68;
+KEY_E :: 69;
+KEY_G :: 71;
+KEY_M :: 77;
+KEY_S :: 83;
+KEY_W :: 87;
+KEY_X :: 88;
+KEY_ESCAPE :: 256;
+KEY_ENTER :: 257;
+KEY_TAB :: 258;
+KEY_BACKSPACE :: 259;
+KEY_RIGHT :: 262;
+KEY_LEFT :: 263;
+KEY_DOWN :: 264;
+KEY_UP :: 265;
+KEY_KB_MENU :: 348;
+MOUSE_BUTTON_LEFT :: 0;
+MOUSE_BUTTON_RIGHT :: 1;
+MOUSE_BUTTON_MIDDLE :: 2;
+MOUSE_LEFT_BUTTON :: 0;
+TEXTURE_FILTER_POINT :: 0;
+TEXTURE_FILTER_BILINEAR :: 1;
+BLEND_ALPHA :: 0;
+BLEND_ADDITIVE :: 1;
+BLEND_MULTIPLIED :: 2;
+BLEND_ADD_COLORS :: 3;
+BLEND_SUBTRACT_COLORS :: 4;
+BLEND_ALPHA_PREMULTIPLY :: 5;
+FLAG_WINDOW_RESIZABLE :: 4;
+FLAG_VSYNC_HINT :: 64;
+FLAG_WINDOW_HIDDEN :: 128;
+FLAG_WINDOW_ALWAYS_RUN :: 256;
+
+WHITE :: Color.{255, 255, 255, 255};
+BLACK :: Color.{0, 0, 0, 255};
+
+#scope_file
+sdl :: #system_library "SDL2";
+libm :: #system_library "m";
+libc :: #system_library "c";
+
+Vertex :: struct {
+    x: float32
+    y: float32
+    color: Color
+    u: float32
+    v: float32
+}
+SdlRect :: struct {
+    x: s32
+    y: s32
+    w: s32
+    h: s32
+}
+DisplayMode :: struct {
+    format: u32
+    w: s32
+    h: s32
+    refresh_rate: s32
+    driverdata: *void
+}
+
+// SDL_Event is 56 bytes; each view reads one event kind's fields.
+Event :: struct {
+    kind: u32
+    timestamp: u32
+    payload: [6]u64
+}
+KeyEvent :: struct {
+    kind: u32
+    timestamp: u32
+    window: u32
+    state: u8
+    repeated: u8
+    pad: u16
+    scancode: s32
+    sym: s32
+    modifiers: u16
+    pad2: u16
+    reserved: u32
+}
+MotionEvent :: struct {
+    kind: u32
+    timestamp: u32
+    window: u32
+    which: u32
+    state: u32
+    x: s32
+    y: s32
+    xrel: s32
+    yrel: s32
+}
+ButtonEvent :: struct {
+    kind: u32
+    timestamp: u32
+    window: u32
+    which: u32
+    pressed_button: u8
+    state: u8
+    clicks: u8
+    pad: u8
+    x: s32
+    y: s32
+}
+WindowEvent :: struct {
+    kind: u32
+    timestamp: u32
+    window: u32
+    change: u8
+    pad1: u8
+    pad2: u8
+    pad3: u8
+    data1: s32
+    data2: s32
+}
+FingerEvent :: struct {
+    kind: u32
+    timestamp: u32
+    touch: s64
+    finger: s64
+    x: float32
+    y: float32
+}
+
+SdlInit :: (flags: u32) -> s32 #foreign sdl "SDL_InitSubSystem";
+SdlQuit :: (flags: u32) #foreign sdl "SDL_QuitSubSystem";
+SdlCreateWindow :: (title: *u8, x: s32, y: s32, width: s32, height: s32, flags: u32) -> *void #foreign sdl "SDL_CreateWindow";
+SdlDestroyWindow :: (window: *void) #foreign sdl "SDL_DestroyWindow";
+SdlCreateRenderer :: (window: *void, index: s32, flags: u32) -> *void #foreign sdl "SDL_CreateRenderer";
+SdlDestroyRenderer :: (renderer: *void) #foreign sdl "SDL_DestroyRenderer";
+SdlDrawColor :: (renderer: *void, r: u8, g: u8, b: u8, a: u8) -> s32 #foreign sdl "SDL_SetRenderDrawColor";
+SdlClear :: (renderer: *void) -> s32 #foreign sdl "SDL_RenderClear";
+SdlPresent :: (renderer: *void) #foreign sdl "SDL_RenderPresent";
+SdlGeometry :: (renderer: *void, texture: *void, vertices: *Vertex, count: s32,
+    indices: *s32, index_count: s32) -> s32 #foreign sdl "SDL_RenderGeometry";
+SdlDrawBlend :: (renderer: *void, mode: s32) -> s32 #foreign sdl "SDL_SetRenderDrawBlendMode";
+SdlTextureBlend :: (texture: *void, mode: s32) -> s32 #foreign sdl "SDL_SetTextureBlendMode";
+SdlComposeBlend :: (source_color: s32, destination_color: s32, color_operation: s32,
+    source_alpha: s32, destination_alpha: s32, alpha_operation: s32) -> s32 #foreign sdl "SDL_ComposeCustomBlendMode";
+SdlClipRect :: (renderer: *void, rect: *SdlRect) -> s32 #foreign sdl "SDL_RenderSetClipRect";
+SdlTarget :: (renderer: *void, texture: *void) -> s32 #foreign sdl "SDL_SetRenderTarget";
+SdlCreateTexture :: (renderer: *void, format: u32, access: s32, width: s32, height: s32) -> *void #foreign sdl "SDL_CreateTexture";
+SdlDestroyTexture :: (texture: *void) #foreign sdl "SDL_DestroyTexture";
+SdlUpdateTexture :: (texture: *void, rect: *void, pixels: *void, pitch: s32) -> s32 #foreign sdl "SDL_UpdateTexture";
+SdlScaleMode :: (texture: *void, mode: s32) -> s32 #foreign sdl "SDL_SetTextureScaleMode";
+SdlReadPixels :: (renderer: *void, rect: *void, format: u32, pixels: *void, pitch: s32) -> s32 #foreign sdl "SDL_RenderReadPixels";
+SdlOutputSize :: (renderer: *void, width: *s32, height: *s32) -> s32 #foreign sdl "SDL_GetRendererOutputSize";
+SdlPoll :: (event: *Event) -> s32 #foreign sdl "SDL_PollEvent";
+SdlWindowSize :: (window: *void, width: *s32, height: *s32) #foreign sdl "SDL_GetWindowSize";
+SdlWindowDisplay :: (window: *void) -> s32 #foreign sdl "SDL_GetWindowDisplayIndex";
+SdlDisplayMode :: (display: s32, mode: *DisplayMode) -> s32 #foreign sdl "SDL_GetCurrentDisplayMode";
+SdlCounter :: () -> u64 #foreign sdl "SDL_GetPerformanceCounter";
+SdlFrequency :: () -> u64 #foreign sdl "SDL_GetPerformanceFrequency";
+SdlDelay :: (milliseconds: u32) #foreign sdl "SDL_Delay";
+Allocate :: (size: u64) -> *void #foreign libc "malloc";
+Free :: (value: *void) #foreign libc "free";
+Copy :: (output: *void, input: *void, count: u64) -> *void #foreign libc "memcpy";
+SinRaw :: (value: float32) -> float32 #foreign libm "sinf";
+CosRaw :: (value: float32) -> float32 #foreign libm "cosf";
+SqrtRaw :: (value: float32) -> float32 #foreign libm "sqrtf";
+FabsRaw :: (value: float32) -> float32 #foreign libm "fabsf";
+ExpRaw :: (value: float32) -> float32 #foreign libm "expf";
+PowRaw :: (base: float32, exponent: float32) -> float32 #foreign libm "powf";
+FmodRaw :: (value: float32, divisor: float32) -> float32 #foreign libm "fmodf";
+AbsRaw :: (value: s32) -> s32 #foreign libc "abs";
+
+INIT_VIDEO :: 0x20;
+// SDL_PIXELFORMAT_ABGR8888: R, G, B, A bytes in memory.
+RGBA :: 0x16762004;
+ACCESS_STATIC :: 0;
+ACCESS_STREAMING :: 1;
+ACCESS_TARGET :: 2;
+SDL_BLEND :: 1;
+SDL_ADD :: 2;
+SDL_MUL :: 8;
+DEGREES :: 0.017453292;
+TEXTURES :: 1024;
+TEXT_CACHE :: 64;
+TOUCHES :: 10;
+
+TextureSlot :: struct {
+    handle: *void
+    width: s32
+    height: s32
+    target: bool
+}
+TextEntry :: struct {
+    handle: *void
+    size: s32
+    width: s32
+    height: s32
+    length: s64
+    bytes: [256]u8
+    used: u64
+}
+Touch :: struct {
+    finger: s64
+    x: float32
+    y: float32
+}
+
+window: *void;
+renderer: *void;
+// One white pixel: shapes draw through it, so every draw blends by its texture
+// blend mode (SDL's software renderer ignores the draw blend mode for shapes).
+white: *void;
+config_flags: u32;
+should_close: bool;
+exit_key: s32 = 256;
+textures: [TEXTURES]TextureSlot;
+text_cache: [TEXT_CACHE]TextEntry;
+text_raster: bool;
+frames: u64;
+keys_down: [512]bool;
+keys_pressed: [512]bool;
+buttons_down: [3]bool;
+buttons_pressed: [3]bool;
+mouse: Vector2;
+mouse_previous: Vector2;
+touches: [TOUCHES]Touch;
+touch_count: s32;
+camera: Camera;
+camera_active: bool;
+blend: s32 = SDL_BLEND;
+scissor: SdlRect;
+scissor_active: bool;
+time_frequency: u64 = 1;
+time_start: u64;
+frame_previous: u64;
+frame_time: float32;
+target_fps: s32;
+fixed_frame: float32;
+fixed_elapsed: float64;
+random_state: u64 = 0x853c49e6748fea9b;
+audio_open: bool;
+
+// SDL keycodes to the game key values: letters as uppercase ASCII, named
+// keys from 256 (Escape).
+KeyOf :: (sym: s32) -> s32 {
+    if sym >= 97 && sym <= 122 { return sym - 32 }
+    if sym >= 32 && sym < 127 { return sym }
+    if sym == 27 { return 256 }
+    if sym == 13 { return 257 }
+    if sym == 9 { return 258 }
+    if sym == 8 { return 259 }
+    if sym == 127 { return 261 }
+    if sym == 0x40000049 { return 260 }
+    if sym == 0x4000004F { return 262 }
+    if sym == 0x40000050 { return 263 }
+    if sym == 0x40000051 { return 264 }
+    if sym == 0x40000052 { return 265 }
+    if sym == 0x4000004B { return 266 }
+    if sym == 0x4000004E { return 267 }
+    if sym == 0x4000004A { return 268 }
+    if sym == 0x4000004D { return 269 }
+    if sym == 0x40000039 { return 280 }
+    if sym >= 0x4000003A && sym <= 0x40000045 { return 290 + (sym - 0x4000003A) }
+    if sym == 0x400000E1 { return 340 }
+    if sym == 0x400000E0 { return 341 }
+    if sym == 0x400000E2 { return 342 }
+    if sym == 0x400000E3 { return 343 }
+    if sym == 0x400000E5 { return 344 }
+    if sym == 0x400000E4 { return 345 }
+    if sym == 0x400000E6 { return 346 }
+    if sym == 0x400000E7 { return 347 }
+    if sym == 0x40000076 { return 348 }
+    if sym == 0x4000010E { return 4 }
+    return 0
+}
+
+// SDL buttons 1 (left), 3 (right) and 2 (middle).
+ButtonOf :: (button: u8) -> s32 {
+    if button == cast(u8)1 { return 0 }
+    if button == cast(u8)3 { return 1 }
+    if button == cast(u8)2 { return 2 }
+    return -1
+}
+
+TouchFind :: (finger: s64) -> s32 {
+    for index: cast(s32)0..touch_count - 1 { if touches[index].finger == finger { return index } }
+    return -1
+}
+
+Seconds :: (ticks: u64) -> float64 { return cast(float64)ticks / cast(float64)time_frequency }
+
+PollEvents :: () {
+    for key: 0..511 { keys_pressed[key] = false }
+    for button: 0..2 { buttons_pressed[button] = false }
+    mouse_previous = mouse
+    event: Event
+    while SdlPoll(*event) != 0 {
+        if event.kind == cast(u32)0x100 { should_close = true }
+        if event.kind == cast(u32)0x200 && (cast(*WindowEvent)*event).change == cast(u8)14 { should_close = true }
+        if event.kind == cast(u32)0x300 || event.kind == cast(u32)0x301 {
+            key_event := cast(*KeyEvent)*event
+            key := KeyOf(key_event.sym)
+            if key > 0 && key < 512 {
+                down := event.kind == cast(u32)0x300
+                if down && key_event.repeated == cast(u8)0 && !keys_down[key] { keys_pressed[key] = true }
+                keys_down[key] = down
+                if down && exit_key != 0 && key == exit_key { should_close = true }
+            }
+        }
+        if event.kind == cast(u32)0x400 {
+            motion := cast(*MotionEvent)*event
+            mouse = .{cast(float32)motion.x, cast(float32)motion.y}
+        }
+        if event.kind == cast(u32)0x401 || event.kind == cast(u32)0x402 {
+            press := cast(*ButtonEvent)*event
+            button := ButtonOf(press.pressed_button)
+            mouse = .{cast(float32)press.x, cast(float32)press.y}
+            if button >= 0 {
+                down := event.kind == cast(u32)0x401
+                if down && !buttons_down[button] { buttons_pressed[button] = true }
+                buttons_down[button] = down
+            }
+        }
+        if event.kind >= cast(u32)0x700 && event.kind <= cast(u32)0x702 {
+            finger := cast(*FingerEvent)*event
+            width: s32 = 0; height: s32 = 0
+            if window != null { SdlWindowSize(window, *width, *height) }
+            at := TouchFind(finger.finger)
+            if event.kind == cast(u32)0x701 {
+                if at >= 0 {
+                    touch_count -= 1
+                    touches[at] = touches[touch_count]
+                }
+            } else {
+                if at < 0 && touch_count < TOUCHES { at = touch_count; touch_count += 1; touches[at].finger = finger.finger }
+                if at >= 0 {
+                    touches[at].x = finger.x * cast(float32)width
+                    touches[at].y = finger.y * cast(float32)height
+                }
+            }
+        }
+    }
+}
+
+// The active 2D camera's view of a world point.
+Place :: (x: float32, y: float32) -> Vector2 {
+    if !camera_active { return .{x, y} }
+    dx := (x - camera.target.x) * camera.zoom
+    dy := (y - camera.target.y) * camera.zoom
+    if camera.rotation == 0.0 { return .{camera.offset.x + dx, camera.offset.y + dy} }
+    angle := camera.rotation * DEGREES
+    s := SinRaw(angle); c := CosRaw(angle)
+    return .{camera.offset.x + dx * c - dy * s, camera.offset.y + dx * s + dy * c}
+}
+
+Point :: (x: float32, y: float32, color: Color) -> Vertex {
+    at := Place(x, y)
+    return .{at.x, at.y, color, 0.0, 0.0}
+}
+
+Emit :: (vertices: []Vertex, indices: []s32, picture: *void) {
+    if renderer == null || vertices.count == 0 { return }
+    texture := ifx picture != null then picture else white
+    // Spread coordinates over the white pixel: SDL's software renderer fills
+    // a triangle whose coordinates all match without blending it.
+    if picture == null {
+        for index: cast(s64)0..vertices.count - 1 {
+            vertices[index].u = cast(float32)(index & 1)
+            vertices[index].v = cast(float32)((index >> 1) & 1)
+        }
+    }
+    if texture != null { unused SdlTextureBlend(texture, blend) }
+    index_pointer: *s32 = null
+    if indices.count > 0 { index_pointer = *indices[0] }
+    unused SdlGeometry(renderer, texture, *vertices[0], cast(s32)vertices.count, index_pointer, cast(s32)indices.count)
+}
+
+// A filled polygon around a centre: `count` rim points at radius rx, ry
+// between two angles in degrees, the centre in `inner`, the rim in `outer`.
+Fan :: (center: Vector2, rx: float32, ry: float32, start: float32, sweep: float32,
+    count: s32, inner: Color, outer: Color) {
+    vertices: [130]Vertex
+    indices: [384]s32
+    segments := ifx count < 3 then 3 else ifx count > 128 then 128 else count
+    vertices[0] = Point(center.x, center.y, inner)
+    for index: cast(s32)0..segments {
+        angle := (start + sweep * cast(float32)index / cast(float32)segments) * DEGREES
+        vertices[index + 1] = Point(center.x + CosRaw(angle) * rx, center.y + SinRaw(angle) * ry, outer)
+    }
+    for index: cast(s32)0..segments - 1 {
+        indices[index * 3] = 0; indices[index * 3 + 1] = index + 1; indices[index * 3 + 2] = index + 2
+    }
+    Emit(vertices[0:segments + 2], indices[0:segments * 3], null)
+}
+
+// Enough rim points for a smooth edge at this radius.
+Segments :: (radius: float32) -> s32 {
+    count := cast(s32)(radius * 0.75) + 12
+    return ifx count > 128 then 128 else count
+}
+
+// Four triangles about the centre: SDL's software renderer copies a
+// two-triangle rectangle as a rectangle and then drops additive blending.
+Quad :: (a: Vector2, b: Vector2, c: Vector2, d: Vector2, color: Color) {
+    centre := Vector2.{(a.x + b.x + c.x + d.x) * 0.25, (a.y + b.y + c.y + d.y) * 0.25}
+    vertices: [5]Vertex = .[Point(centre.x, centre.y, color), Point(a.x, a.y, color), Point(b.x, b.y, color),
+        Point(c.x, c.y, color), Point(d.x, d.y, color)]
+    indices: [12]s32 = .[0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1]
+    Emit(vertices[:], indices[:], null)
+}
+
+Slot :: (id: u32) -> *TextureSlot {
+    if id == cast(u32)0 || id > cast(u32)TEXTURES { return null }
+    slot := *textures[id - cast(u32)1]
+    if slot.handle == null { return null }
+    return slot
+}
+
+NewSlot :: (handle: *void, width: s32, height: s32, target: bool) -> u32 {
+    for index: 0..TEXTURES - 1 {
+        if textures[index].handle == null {
+            textures[index] = .{handle, width, height, target}
+            unused SdlTextureBlend(handle, SDL_BLEND)
+            unused SdlScaleMode(handle, 0)
+            return cast(u32)(index + 1)
+        }
+    }
+    SdlDestroyTexture(handle)
+    return 0
+}
+
+TextureOf :: (id: u32, width: s32, height: s32) -> Texture2D {
+    if id == cast(u32)0 { return EmptyTexture() }
+    return .{id, width, height, 1, 7}
+}
+
+TextOpen :: () -> bool {
+    if !text_raster { text_raster = Raster.OpenRaster(1, 1) }
+    return text_raster
+}
+
+// A white rendering of `value` at `size`, cached and tinted when drawn.
+TextTexture :: (value: string, size: s32) -> *TextEntry {
+    cacheable := value.count <= 256
+    if cacheable {
+        for index: 0..TEXT_CACHE - 1 {
+            entry := *text_cache[index]
+            if entry.handle == null || entry.size != size || entry.length != value.count { continue }
+            same := true
+            for at: cast(s64)0..value.count - 1 { if entry.bytes[at] != value[at] { same = false; break } }
+            if same { entry.used = frames; return entry }
+        }
+    }
+    if !TextOpen() { return null }
+    width := Raster.MeasureGlyphWidth(value, size, "")
+    height := Raster.MeasureGlyphLineHeight(size, "")
+    if width <= 0 || height <= 0 || width > 4096 || height > 4096 { return null }
+    pixels: Vec(u8)
+    defer VecFree(pixels)
+    if !VecResize(pixels, cast(s64)width * cast(s64)height * 4) { return null }
+    if !Text.TextPixels(value, size, WHITE, width, height, pixels[:]) { return null }
+    handle := SdlCreateTexture(renderer, cast(u32)RGBA, ACCESS_STATIC, width, height)
+    if handle == null { return null }
+    unused SdlUpdateTexture(handle, null, cast(*void)*pixels[0], width * 4)
+    unused SdlScaleMode(handle, 1)
+    // Replace the least recently drawn entry.
+    chosen := 0
+    for index: 0..TEXT_CACHE - 1 {
+        if text_cache[index].handle == null { chosen = index; break }
+        if text_cache[index].used < text_cache[chosen].used { chosen = index }
+    }
+    entry := *text_cache[chosen]
+    if entry.handle != null { SdlDestroyTexture(entry.handle) }
+    entry.handle = handle; entry.size = size; entry.width = width; entry.height = height
+    entry.length = ifx cacheable then value.count else cast(s64)-1
+    if cacheable { for at: cast(s64)0..value.count - 1 { entry.bytes[at] = value[at] } }
+    entry.used = frames
+    return entry
+}
+
+TexturedQuad :: (handle: *void, corners: [4]Vector2, u0: float32, v0: float32, u1: float32, v1: float32, tint: Color) {
+    vertices: [4]Vertex
+    first := Place(corners[0].x, corners[0].y); second := Place(corners[1].x, corners[1].y)
+    third := Place(corners[2].x, corners[2].y); fourth := Place(corners[3].x, corners[3].y)
+    vertices[0] = .{first.x, first.y, tint, u0, v0}
+    vertices[1] = .{second.x, second.y, tint, u1, v0}
+    vertices[2] = .{third.x, third.y, tint, u1, v1}
+    vertices[3] = .{fourth.x, fourth.y, tint, u0, v1}
+    indices: [6]s32 = .[0, 1, 2, 0, 2, 3]
+    Emit(vertices[:], indices[:], handle)
+}
+
+ApplyScissor :: () {
+    if renderer == null { return }
+    if scissor_active { unused SdlClipRect(renderer, *scissor) } else { unused SdlClipRect(renderer, null) }
+}
+
+NextRandom :: () -> u32 {
+    random_state = random_state * cast(u64)6364136223846793005 + cast(u64)1442695040888963407
+    return cast(u32)(random_state >> cast(u64)33)
+}
+
+EmptyWave :: () -> Wave { return .{0, 0, 0, 0, null} }
+EmptySound :: () -> Sound { return .{.{-1, 0}, 0} }
+EmptyMusic :: () -> Music { return .{.{-1, 0}, 0, false} }
+
+Put16 :: (bytes: []u8, at: s64, value: u32) {
+    bytes[at] = cast(u8)(value & cast(u32)255); bytes[at + 1] = cast(u8)((value >> cast(u32)8) & cast(u32)255)
+}
+Put32 :: (bytes: []u8, at: s64, value: u32) {
+    Put16(bytes[:], at, value & cast(u32)65535); Put16(bytes[:], at + 2, value >> cast(u32)16)
+}
+PutTag :: (bytes: []u8, at: s64, tag: string) { for index: 0..3 { bytes[at + index] = tag[index] } }
+
+// Decodes WAV bytes (PCM, float or ADPCM) into 16-bit frames.
+Decode :: (bytes: []u8) -> Wave {
+    pcm: AudioTypes.PCM
+    defer VecFree(pcm.samples)
+    if WavFile.WavDecode(bytes, AudioTypes.MaxFrames, *pcm) != AudioTypes.OK { return EmptyWave() }
+    if pcm.channels < 1 || pcm.channels > 2 || pcm.rate <= 0 || pcm.samples.count == 0 { return EmptyWave() }
+    size := cast(u64)pcm.samples.count * cast(u64)2
+    data := cast(*s16)Allocate(size)
+    if data == null { return EmptyWave() }
+    for index: cast(s64)0..pcm.samples.count - 1 {
+        value := pcm.samples[index]
+        if value > 1.0 { value = 1.0 }
+        if value < -1.0 { value = -1.0 }
+        data[index] = cast(s16)(value * 32767.0)
+    }
+    return .{cast(u32)(pcm.samples.count / cast(s64)pcm.channels), cast(u32)pcm.rate, 16, cast(u32)pcm.channels, cast(*void)data}
+}
+
+#scope_export
+// Window and frames.
+SetConfigFlags :: (flags: u32) { config_flags = flags }
+
+InitWindow :: (width: s32, height: s32, title: string) {
+    if window != null || width <= 0 || height <= 0 { return }
+    if SdlInit(cast(u32)INIT_VIDEO) != 0 { return }
+    name: [256]u8
+    if !CopyCString(title, name[:]) { return }
+    flags := ifx (config_flags & cast(u32)FLAG_WINDOW_HIDDEN) != cast(u32)0 then cast(u32)0x8 else cast(u32)0x4
+    if (config_flags & cast(u32)FLAG_WINDOW_RESIZABLE) != cast(u32)0 { flags |= cast(u32)0x20 }
+    window = SdlCreateWindow(*name[0], cast(s32)0x2FFF0000, cast(s32)0x2FFF0000, width, height, flags)
+    if window == null { return }
+    vsync := ifx (config_flags & cast(u32)FLAG_VSYNC_HINT) != cast(u32)0 then cast(u32)4 else cast(u32)0
+    // An accelerated renderer when the system has one, else SDL's software one.
+    renderer = SdlCreateRenderer(window, -1, cast(u32)(2 | 8) | vsync)
+    if renderer == null { renderer = SdlCreateRenderer(window, -1, cast(u32)(1 | 8) | vsync) }
+    if renderer == null { SdlDestroyWindow(window); window = null; return }
+    unused SdlDrawBlend(renderer, SDL_BLEND)
+    white = SdlCreateTexture(renderer, cast(u32)RGBA, ACCESS_STATIC, 1, 1)
+    if white != null {
+        pixel: [4]u8 = .[255, 255, 255, 255]
+        unused SdlUpdateTexture(white, null, cast(*void)*pixel[0], 4)
+    }
+    should_close = false
+    time_frequency = SdlFrequency()
+    time_start = SdlCounter()
+    frame_previous = time_start
+    fixed_elapsed = 0.0
+    SetRandomSeed(cast(u32)(time_start & cast(u64)0xFFFFFFFF))
+    PollEvents()
+}
+
+CloseWindow :: () {
+    if window == null { return }
+    for index: 0..TEXTURES - 1 {
+        if textures[index].handle != null { SdlDestroyTexture(textures[index].handle); textures[index] = .{} }
+    }
+    for index: 0..TEXT_CACHE - 1 {
+        if text_cache[index].handle != null { SdlDestroyTexture(text_cache[index].handle); text_cache[index] = .{} }
+    }
+    if white != null { SdlDestroyTexture(white); white = null }
+    SdlDestroyRenderer(renderer); renderer = null
+    SdlDestroyWindow(window); window = null
+    SdlQuit(cast(u32)INIT_VIDEO)
+}
+
+IsWindowReady :: () -> bool { return window != null && renderer != null }
+
+// True once the window is closed or the exit key (Escape unless SetExitKey
+// chose another, or none with KEY_NULL) is pressed.
+WindowShouldClose :: () -> bool { return should_close }
+
+SetExitKey :: (key: s32) { exit_key = key }
+
+// Paces EndDrawing to `fps` frames a second; 0 draws as fast as frames come.
+SetTargetFPS :: (fps: s32) { target_fps = ifx fps < 0 then 0 else fps }
+
+// Every frame lasts exactly `seconds` for GetFrameTime and GetTime, without
+// pacing: headless and replayed runs step deterministically. 0 measures time.
+SetFixedFrameTime :: (seconds: float32) { fixed_frame = ifx seconds > 0.0 then seconds else 0.0 }
+
+GetScreenWidth :: () -> s32 {
+    width: s32 = 0; height: s32 = 0
+    if window != null { SdlWindowSize(window, *width, *height) }
+    return width
+}
+
+GetScreenHeight :: () -> s32 {
+    width: s32 = 0; height: s32 = 0
+    if window != null { SdlWindowSize(window, *width, *height) }
+    return height
+}
+
+GetCurrentMonitor :: () -> s32 {
+    if window == null { return 0 }
+    display := SdlWindowDisplay(window)
+    return ifx display < 0 then 0 else display
+}
+
+GetMonitorRefreshRate :: (monitor: s32) -> s32 {
+    mode: DisplayMode
+    if SdlDisplayMode(monitor, *mode) != 0 { return 0 }
+    return mode.refresh_rate
+}
+
+BeginDrawing :: () {
+    camera_active = false
+    if renderer != null { unused SdlTarget(renderer, null); ApplyScissor() }
+}
+
+// Shows the frame, waits for the target rate and reads the input the next
+// frame sees.
+EndDrawing :: () {
+    if renderer != null { SdlPresent(renderer) }
+    frames += cast(u64)1
+    if fixed_frame > 0.0 {
+        fixed_elapsed += cast(float64)fixed_frame
+        frame_previous = SdlCounter()
+    } else {
+        if target_fps > 0 {
+            deadline := frame_previous + time_frequency / cast(u64)target_fps
+            now := SdlCounter()
+            if now < deadline {
+                remaining := Seconds(deadline - now)
+                if remaining > 0.002 { SdlDelay(cast(u32)((remaining - 0.001) * 1000.0)) }
+                while SdlCounter() < deadline {}
+            }
+        }
+        now := SdlCounter()
+        frame_time = cast(float32)Seconds(now - frame_previous)
+        frame_previous = now
+    }
+    PollEvents()
+}
+
+// Timing and random values.
+GetTime :: () -> float64 {
+    if fixed_frame > 0.0 { return fixed_elapsed }
+    return Seconds(SdlCounter() - time_start)
+}
+
+GetFrameTime :: () -> float32 { return ifx fixed_frame > 0.0 then fixed_frame else frame_time }
+
+SetRandomSeed :: (seed: u32) {
+    random_state = cast(u64)seed
+    unused NextRandom()
+}
+
+// A value from `minimum` to `maximum`, both included.
+GetRandomValue :: (minimum: s32, maximum: s32) -> s32 {
+    low := ifx minimum < maximum then minimum else maximum
+    high := ifx minimum < maximum then maximum else minimum
+    span := cast(u64)(cast(s64)high - cast(s64)low + 1)
+    return cast(s32)(cast(s64)low + cast(s64)(cast(u64)NextRandom() % span))
+}
+
+// Input, as of the last EndDrawing.
+IsKeyPressed :: (key: s32) -> bool { return key > 0 && key < 512 && keys_pressed[key] }
+IsKeyDown :: (key: s32) -> bool { return key > 0 && key < 512 && keys_down[key] }
+IsMouseButtonPressed :: (button: s32) -> bool { return button >= 0 && button < 3 && buttons_pressed[button] }
+GetMousePosition :: () -> Vector2 { return mouse }
+GetMouseDelta :: () -> Vector2 { return .{mouse.x - mouse_previous.x, mouse.y - mouse_previous.y} }
+GetTouchPointCount :: () -> s32 { return touch_count }
+GetTouchPosition :: (index: s32) -> Vector2 {
+    if index < 0 || index >= touch_count { return .{} }
+    return .{touches[index].x, touches[index].y}
+}
+
+// Drawing.
+ClearBackground :: (color: Color) {
+    if renderer == null { return }
+    unused SdlDrawColor(renderer, color.r, color.g, color.b, color.a)
+    unused SdlClear(renderer)
+}
+
+DrawRectangle :: (pos_x: s32, pos_y: s32, width: s32, height: s32, color: Color) {
+    x := cast(float32)pos_x; y := cast(float32)pos_y
+    right := x + cast(float32)width; bottom := y + cast(float32)height
+    Quad(.{x, y}, .{right, y}, .{right, bottom}, .{x, bottom}, color)
+}
+
+DrawCircle :: (center_x: s32, center_y: s32, radius: float32, color: Color) {
+    Fan(.{cast(float32)center_x, cast(float32)center_y}, radius, radius, 0.0, 360.0, Segments(radius), color, color)
+}
+
+DrawCircleV :: (center: Vector2, radius: float32, color: Color) {
+    Fan(center, radius, radius, 0.0, 360.0, Segments(radius), color, color)
+}
+
+DrawCircleGradient :: (center: Vector2, radius: float32, inner: Color, outer: Color) {
+    Fan(center, radius, radius, 0.0, 360.0, Segments(radius), inner, outer)
+}
+
+DrawEllipse :: (center_x: s32, center_y: s32, radius_h: float32, radius_v: float32, color: Color) {
+    larger := ifx radius_h > radius_v then radius_h else radius_v
+    Fan(.{cast(float32)center_x, cast(float32)center_y}, radius_h, radius_v, 0.0, 360.0, Segments(larger), color, color)
+}
+
+// A band between two radii from `start_angle` to `end_angle` (degrees,
+// clockwise from the right); fewer than 4 segments picks enough itself.
+DrawRing :: (center: Vector2, inner_radius: float32, outer_radius: float32,
+    start_angle: float32, end_angle: float32, segments: s32, color: Color) {
+    if outer_radius <= 0.0 || start_angle == end_angle { return }
+    inner := ifx inner_radius < outer_radius then inner_radius else outer_radius
+    outer := ifx inner_radius < outer_radius then outer_radius else inner_radius
+    count := ifx segments < 4 then Segments(outer) else ifx segments > 128 then 128 else segments
+    vertices: [258]Vertex
+    indices: [768]s32
+    for index: cast(s32)0..count {
+        angle := (start_angle + (end_angle - start_angle) * cast(float32)index / cast(float32)count) * DEGREES
+        c := CosRaw(angle); s := SinRaw(angle)
+        vertices[index * 2] = Point(center.x + c * inner, center.y + s * inner, color)
+        vertices[index * 2 + 1] = Point(center.x + c * outer, center.y + s * outer, color)
+    }
+    for index: cast(s32)0..count - 1 {
+        at := index * 6; base := index * 2
+        indices[at] = base; indices[at + 1] = base + 1; indices[at + 2] = base + 3
+        indices[at + 3] = base; indices[at + 4] = base + 3; indices[at + 5] = base + 2
+    }
+    Emit(vertices[0:(count + 1) * 2], indices[0:count * 6], null)
+}
+
+DrawTriangle :: (v1: Vector2, v2: Vector2, v3: Vector2, color: Color) {
+    vertices: [3]Vertex = .[Point(v1.x, v1.y, color), Point(v2.x, v2.y, color), Point(v3.x, v3.y, color)]
+    none: [1]s32
+    Emit(vertices[:], none[0:0], null)
+}
+
+DrawLineEx :: (start: Vector2, end: Vector2, thickness: float32, color: Color) {
+    dx := end.x - start.x; dy := end.y - start.y
+    length := SqrtRaw(dx * dx + dy * dy)
+    if length <= 0.0 || thickness <= 0.0 { return }
+    nx := -dy / length * thickness * 0.5; ny := dx / length * thickness * 0.5
+    Quad(.{start.x + nx, start.y + ny}, .{end.x + nx, end.y + ny}, .{end.x - nx, end.y - ny}, .{start.x - nx, start.y - ny}, color)
+}
+
+BeginMode2D :: (view: Camera) { camera = view; camera_active = true }
+EndMode2D :: () { camera_active = false }
+
+BeginBlendMode :: (mode: s32) {
+    blend = SDL_BLEND
+    if mode == BLEND_ADDITIVE { blend = SDL_ADD }
+    if mode == BLEND_MULTIPLIED { blend = SDL_MUL }
+    // SDL_BLENDFACTOR_ONE (2), ONE_MINUS_SRC_ALPHA (6); ADD (1), SUBTRACT (2).
+    if mode == BLEND_ADD_COLORS { blend = SdlComposeBlend(2, 2, 1, 2, 2, 1) }
+    if mode == BLEND_SUBTRACT_COLORS { blend = SdlComposeBlend(2, 2, 2, 2, 2, 2) }
+    if mode == BLEND_ALPHA_PREMULTIPLY { blend = SdlComposeBlend(2, 6, 1, 2, 6, 1) }
+    if renderer != null { unused SdlDrawBlend(renderer, blend) }
+}
+
+EndBlendMode :: () {
+    blend = SDL_BLEND
+    if renderer != null { unused SdlDrawBlend(renderer, blend) }
+}
+
+// Draws only inside this screen rectangle until EndScissorMode.
+BeginScissorMode :: (x: s32, y: s32, width: s32, height: s32) {
+    scissor = .{x, y, ifx width < 0 then 0 else width, ifx height < 0 then 0 else height}
+    scissor_active = true
+    ApplyScissor()
+}
+
+EndScissorMode :: () { scissor_active = false; ApplyScissor() }
+
+// Text in Kryon's typeface, `font_size` pixels tall, from its top left.
+DrawText :: (value: string, pos_x: s32, pos_y: s32, font_size: s32, color: Color) {
+    if renderer == null || value.count == 0 || font_size <= 0 { return }
+    entry := TextTexture(value, font_size)
+    if entry == null { return }
+    x := cast(float32)pos_x; y := cast(float32)pos_y
+    right := x + cast(float32)entry.width; bottom := y + cast(float32)entry.height
+    corners: [4]Vector2 = .[.{x, y}, .{right, y}, .{right, bottom}, .{x, bottom}]
+    TexturedQuad(entry.handle, corners, 0.0, 0.0, 1.0, 1.0, color)
+    if entry.length < 0 { SdlDestroyTexture(entry.handle); entry.handle = null }
+}
+
+MeasureText :: (value: string, font_size: s32) -> s32 {
+    if value.count == 0 || font_size <= 0 || !TextOpen() { return 0 }
+    return Raster.MeasureGlyphWidth(value, font_size, "")
+}
+
+// Textures and render targets.
+EmptyTexture :: () -> Texture2D { return .{0, 0, 0, 0, 0} }
+EmptyRenderTexture :: () -> RenderTexture2D { return .{0, EmptyTexture(), EmptyTexture()} }
+
+FileExists :: (path: string) -> bool { return PathExists(path) }
+
+// A picture file in any format Kryon decodes.
+LoadTexture :: (path: string) -> Texture2D {
+    if renderer == null { return EmptyTexture() }
+    picture := Pixels.LoadImagePixels(path)
+    defer VecFree(picture.pixels)
+    if picture.width <= 0 || picture.height <= 0 || picture.pixels.count < cast(s64)picture.width * cast(s64)picture.height * 4 { return EmptyTexture() }
+    handle := SdlCreateTexture(renderer, cast(u32)RGBA, ACCESS_STATIC, picture.width, picture.height)
+    if handle == null { return EmptyTexture() }
+    unused SdlUpdateTexture(handle, null, cast(*void)*picture.pixels[0], picture.width * 4)
+    return TextureOf(NewSlot(handle, picture.width, picture.height, false), picture.width, picture.height)
+}
+
+// A texture the game updates with UpdateTexture, from RGBA (7) or RGB (4) pixels.
+LoadTextureFromImage :: (image: PixelImage) -> Texture2D {
+    if renderer == null || image.width <= 0 || image.height <= 0 { return EmptyTexture() }
+    if image.format != 7 && image.format != 4 { return EmptyTexture() }
+    handle := SdlCreateTexture(renderer, cast(u32)RGBA, ACCESS_STREAMING, image.width, image.height)
+    if handle == null { return EmptyTexture() }
+    texture := TextureOf(NewSlot(handle, image.width, image.height, false), image.width, image.height)
+    if image.data != null {
+        if image.format == 7 { UpdateTexture(texture, image.data) } else {
+            count := cast(s64)image.width * cast(s64)image.height
+            rgb := BytesFromPointer(cast(*u8)image.data, cast(u64)count * cast(u64)3)
+            rgba: Vec(u8)
+            defer VecFree(rgba)
+            if VecResize(rgba, count * 4) {
+                for index: cast(s64)0..count - 1 {
+                    rgba[index * 4] = rgb[index * 3]; rgba[index * 4 + 1] = rgb[index * 3 + 1]
+                    rgba[index * 4 + 2] = rgb[index * 3 + 2]; rgba[index * 4 + 3] = 255
+                }
+                UpdateTexture(texture, cast(*void)*rgba[0])
+            }
+        }
+    }
+    return texture
+}
+
+// Replaces the whole texture with RGBA pixels.
+UpdateTexture :: (texture: Texture2D, pixels: *void) {
+    slot := Slot(texture.id)
+    if slot == null || pixels == null { return }
+    unused SdlUpdateTexture(slot.handle, null, pixels, slot.width * 4)
+}
+
+UnloadTexture :: (texture: Texture2D) {
+    slot := Slot(texture.id)
+    if slot == null || slot.target { return }
+    SdlDestroyTexture(slot.handle)
+    slot.* = .{}
+}
+
+SetTextureFilter :: (texture: Texture2D, filter: s32) {
+    slot := Slot(texture.id)
+    if slot != null { unused SdlScaleMode(slot.handle, ifx filter == TEXTURE_FILTER_POINT then 0 else 1) }
+}
+
+// The part `source` of a texture into `destination`, turned `rotation`
+// degrees about `origin` (relative to the destination) and tinted. A
+// negative source width or height mirrors it. Render textures draw upright
+// with a negative source height, as games already draw them.
+DrawTexturePro :: (texture: Texture2D, source: Rectangle, destination: Rectangle,
+    origin: Vector2, rotation: float32, tint: Color) {
+    slot := Slot(texture.id)
+    if slot == null || slot.width <= 0 || slot.height <= 0 { return }
+    width := cast(float32)slot.width; height := cast(float32)slot.height
+    source_width := ifx source.width < 0.0 then -source.width else source.width
+    source_height := ifx source.height < 0.0 then -source.height else source.height
+    u0 := source.x / width; u1 := (source.x + source_width) / width
+    v0 := source.y / height; v1 := (source.y + source_height) / height
+    if source.width < 0.0 { swap := u0; u0 = u1; u1 = swap }
+    flip := source.height < 0.0
+    if slot.target { flip = !flip }
+    if flip { swap := v0; v0 = v1; v1 = swap }
+    left := -origin.x; top := -origin.y
+    right := destination.width - origin.x; bottom := destination.height - origin.y
+    corners: [4]Vector2 = .[.{left, top}, .{right, top}, .{right, bottom}, .{left, bottom}]
+    angle := rotation * DEGREES
+    s := SinRaw(angle); c := CosRaw(angle)
+    for index: 0..3 {
+        x := corners[index].x; y := corners[index].y
+        corners[index] = .{destination.x + x * c - y * s, destination.y + x * s + y * c}
+    }
+    TexturedQuad(slot.handle, corners, u0, v0, u1, v1, tint)
+}
+
+DrawTexture :: (texture: Texture2D, pos_x: s32, pos_y: s32, tint: Color) {
+    width := cast(float32)texture.width; height := cast(float32)texture.height
+    DrawTexturePro(texture, .{0.0, 0.0, width, height},
+        .{cast(float32)pos_x, cast(float32)pos_y, width, height}, .{}, 0.0, tint)
+}
+
+LoadRenderTexture :: (width: s32, height: s32) -> RenderTexture2D {
+    if renderer == null || width <= 0 || height <= 0 { return EmptyRenderTexture() }
+    handle := SdlCreateTexture(renderer, cast(u32)RGBA, ACCESS_TARGET, width, height)
+    if handle == null { return EmptyRenderTexture() }
+    id := NewSlot(handle, width, height, true)
+    if id == cast(u32)0 { return EmptyRenderTexture() }
+    return .{id, TextureOf(id, width, height), EmptyTexture()}
+}
+
+UnloadRenderTexture :: (target: RenderTexture2D) {
+    slot := Slot(target.id)
+    if slot == null || !slot.target { return }
+    SdlDestroyTexture(slot.handle)
+    slot.* = .{}
+}
+
+IsRenderTextureValid :: (target: RenderTexture2D) -> bool {
+    slot := Slot(target.id)
+    return slot != null && slot.target
+}
+
+BeginTextureMode :: (target: RenderTexture2D) {
+    slot := Slot(target.id)
+    if renderer == null || slot == null || !slot.target { return }
+    camera_active = false
+    unused SdlTarget(renderer, slot.handle)
+    ApplyScissor()
+}
+
+EndTextureMode :: () {
+    camera_active = false
+    if renderer != null { unused SdlTarget(renderer, null); ApplyScissor() }
+}
+
+// The frame drawn so far as RGBA pixels; UnloadImage frees them.
+LoadImageFromScreen :: () -> PixelImage {
+    width: s32 = 0; height: s32 = 0
+    if renderer == null || SdlOutputSize(renderer, *width, *height) != 0 || width <= 0 || height <= 0 { return .{} }
+    data := Allocate(cast(u64)width * cast(u64)height * cast(u64)4)
+    if data == null { return .{} }
+    if SdlReadPixels(renderer, null, cast(u32)RGBA, data, width * 4) != 0 { Free(data); return .{} }
+    return .{data, width, height, 1, 7}
+}
+
+UnloadImage :: (image: PixelImage) { if image.data != null { Free(image.data) } }
+
+// Audio, mixed by std/audio and played through the platform's output.
+InitAudioDevice :: () {
+    if audio_open { return }
+    frequency := SdlFrequency()
+    deadline := SdlCounter() + frequency * cast(u64)2
+    // The device opens in the background; wait briefly so games can ask
+    // IsAudioDeviceReady at once, as they do.
+    while true {
+        if Sink.AudioSinkOpen() { audio_open = true; return }
+        if Sink.AudioSinkUnavailable() || SdlCounter() > deadline { return }
+        SdlDelay(5)
+    }
+}
+
+CloseAudioDevice :: () {
+    if !audio_open { return }
+    Sink.AudioSinkClose()
+    audio_open = false
+}
+
+IsAudioDeviceReady :: () -> bool { return audio_open && Sink.AudioSinkReady() }
+SetMasterVolume :: (volume: float32) { Audio.AudioSetMasterGain(volume) }
+
+LoadSound :: (path: string) -> Sound {
+    voice := Audio.AudioLoadFile(path, false)
+    if voice.slot < 0 { return EmptySound() }
+    return .{voice, 1}
+}
+
+// A sound from 16-bit frames, as LoadWaveFromMemory gives them.
+LoadSoundFromWave :: (wave: Wave) -> Sound {
+    if wave.data == null || wave.frame_count == cast(u32)0 || wave.sample_size != cast(u32)16 ||
+        wave.channels < cast(u32)1 || wave.channels > cast(u32)2 { return EmptySound() }
+    data_size := cast(u64)wave.frame_count * cast(u64)wave.channels * cast(u64)2
+    total := data_size + cast(u64)44
+    bytes: Vec(u8)
+    defer VecFree(bytes)
+    if !VecResize(bytes, cast(s64)total) { return EmptySound() }
+    PutTag(bytes[:], 0, "RIFF"); Put32(bytes[:], 4, cast(u32)(total - cast(u64)8)); PutTag(bytes[:], 8, "WAVE")
+    PutTag(bytes[:], 12, "fmt "); Put32(bytes[:], 16, 16); Put16(bytes[:], 20, 1); Put16(bytes[:], 22, wave.channels)
+    Put32(bytes[:], 24, wave.sample_rate); Put32(bytes[:], 28, wave.sample_rate * wave.channels * cast(u32)2)
+    Put16(bytes[:], 32, wave.channels * cast(u32)2); Put16(bytes[:], 34, 16)
+    PutTag(bytes[:], 36, "data"); Put32(bytes[:], 40, cast(u32)data_size)
+    unused Copy(cast(*void)*bytes[44], wave.data, data_size)
+    voice := Audio.AudioLoad(TextView(bytes[:]), false)
+    if voice.slot < 0 { return EmptySound() }
+    return .{voice, wave.frame_count}
+}
+
+PlaySound :: (sound: Sound) { if IsSoundValid(sound) { unused Audio.AudioPlay(sound.voice) } }
+StopSound :: (sound: Sound) { if IsSoundValid(sound) { Audio.AudioStop(sound.voice) } }
+UnloadSound :: (sound: Sound) { if IsSoundValid(sound) { Audio.AudioUnload(sound.voice) } }
+SetSoundVolume :: (sound: Sound, volume: float32) { if IsSoundValid(sound) { Audio.AudioSetGain(sound.voice, volume) } }
+IsSoundValid :: (sound: Sound) -> bool { return sound.voice.slot >= 0 && sound.frame_count > cast(u32)0 }
+
+// WAV bytes as 16-bit frames; UnloadWave frees them.
+LoadWaveFromMemory :: (file_type: string, data: *u8, size: s32) -> Wave {
+    unused file_type
+    if data == null || size <= 0 { return EmptyWave() }
+    return Decode(BytesFromPointer(data, cast(u64)size))
+}
+
+UnloadWave :: (wave: Wave) { if wave.data != null { Free(wave.data) } }
+
+// Music streams from its file and loops unless `looping` is cleared.
+LoadMusicStream :: (path: string) -> Music {
+    voice := Audio.AudioLoadFile(path, true)
+    if voice.slot < 0 { return EmptyMusic() }
+    return .{voice, 1, true}
+}
+
+PlayMusicStream :: (music: Music) {
+    if !IsMusicValid(music) { return }
+    Audio.AudioSetLooping(music.voice, music.looping)
+    unused Audio.AudioPlay(music.voice)
+}
+
+// The mixer reads streams as it plays; this applies `looping` changes.
+UpdateMusicStream :: (music: Music) { if IsMusicValid(music) { Audio.AudioSetLooping(music.voice, music.looping) } }
+StopMusicStream :: (music: Music) { if IsMusicValid(music) { Audio.AudioStop(music.voice) } }
+SeekMusicStream :: (music: Music, position: float32) { if IsMusicValid(music) { unused Audio.AudioSeek(music.voice, cast(float64)position) } }
+SetMusicVolume :: (music: Music, volume: float32) { if IsMusicValid(music) { Audio.AudioSetGain(music.voice, volume) } }
+UnloadMusicStream :: (music: Music) { if IsMusicValid(music) { Audio.AudioUnload(music.voice) } }
+IsMusicValid :: (music: Music) -> bool { return music.voice.slot >= 0 && music.frame_count > cast(u32)0 }
+
+// Math with the C names games call.
+sinf :: (value: float32) -> float32 { return SinRaw(value) }
+cosf :: (value: float32) -> float32 { return CosRaw(value) }
+sqrtf :: (value: float32) -> float32 { return SqrtRaw(value) }
+fabsf :: (value: float32) -> float32 { return FabsRaw(value) }
+expf :: (value: float32) -> float32 { return ExpRaw(value) }
+powf :: (base: float32, exponent: float32) -> float32 { return PowRaw(base, exponent) }
+fmodf :: (value: float32, divisor: float32) -> float32 { return FmodRaw(value, divisor) }
+abs :: (value: s32) -> s32 { return AbsRaw(value) }

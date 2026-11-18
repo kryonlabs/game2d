@@ -1,0 +1,312 @@
+// Game2D's SDL2 surface on a private display with SDL's software renderer
+// and dummy audio: shapes, camera, scissor, blending, render targets,
+// textures, text, input, timing, random values and audio.
+//     sdl_surface_test PICTURE.png FOLDER
+using Game :: #import "Sdl";
+#import "kryon/geometry"
+#import "kryon/drawing_props"
+#import "std/c_string"
+#import "std/file"
+#import "std/byte_text_linux"
+#import "std/format"
+
+sdl :: #system_library "SDL2";
+Push :: (event: *void) -> s32 #foreign sdl "SDL_PushEvent";
+Counter :: () -> u64 #foreign sdl "SDL_GetPerformanceCounter";
+Frequency :: () -> u64 #foreign sdl "SDL_GetPerformanceFrequency";
+
+Event :: struct {
+    kind: u32
+    timestamp: u32
+    window: u32
+    which: u32
+    button: u8
+    state: u8
+    clicks: u8
+    padding: u8
+    x: s32
+    y: s32
+    payload: [28]u8
+}
+
+FingerEvent :: struct {
+    kind: u32
+    timestamp: u32
+    touch: s64
+    finger: s64
+    x: float32
+    y: float32
+    payload: [24]u8
+}
+
+RED :: Color.{220, 0, 0, 255};
+GREEN :: Color.{0, 200, 0, 255};
+BLUE :: Color.{0, 0, 230, 255};
+
+PushKey :: (down: bool, sym: s32) -> bool {
+    event: Event
+    event.kind = ifx down then cast(u32)0x300 else cast(u32)0x301
+    event.which = ifx down then cast(u32)1 else cast(u32)0 // pressed, not a repeat
+    event.x = sym
+    return Push(cast(*void)*event) == 1
+}
+
+PushButton :: (down: bool, x: s32, y: s32) -> bool {
+    event: Event
+    event.kind = ifx down then cast(u32)0x401 else cast(u32)0x402
+    event.button = cast(u8)1
+    event.x = x; event.y = y
+    return Push(cast(*void)*event) == 1
+}
+
+PushMotion :: (x: s32, y: s32) -> bool {
+    event: Event
+    event.kind = cast(u32)0x400
+    event.button = cast(u8)0 // motion state lives here; x and y follow it
+    event.x = x; event.y = y
+    return Push(cast(*void)*event) == 1
+}
+
+PushFinger :: (kind: u32, x: float32, y: float32) -> bool {
+    event: FingerEvent
+    event.kind = kind
+    event.finger = 7
+    event.x = x; event.y = y
+    return Push(cast(*void)*event) == 1
+}
+
+PixelAt :: (image: PixelImage, x: s32, y: s32) -> Color {
+    bytes := cast(*u8)image.data
+    at := (cast(s64)y * cast(s64)image.width + cast(s64)x) * 4
+    return .{bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]}
+}
+
+Near :: (value: u8, wanted: s32) -> bool {
+    difference := cast(s32)value - wanted
+    return difference >= -12 && difference <= 12
+}
+
+Is :: (color: Color, r: s32, g: s32, b: s32) -> bool { return Near(color.r, r) && Near(color.g, g) && Near(color.b, b) }
+
+// One frame of every drawing call, checked in the frame's own pixels.
+Drawing :: () -> s32 {
+    target := LoadRenderTexture(20, 20)
+    if !IsRenderTextureValid(target) { return 20 }
+    defer UnloadRenderTexture(target)
+    // Red, green, blue and white quadrants. (SDL's software renderer samples
+    // a turned 2 by 2 texture at one texel; games' textures are larger.)
+    quadrants: [64]u8
+    colors: [4]Color = .[Color.{255, 0, 0, 255}, Color.{0, 255, 0, 255}, Color.{0, 0, 255, 255}, Color.{255, 255, 255, 255}]
+    for y: 0..3 {
+        for x: 0..3 {
+            color := colors[(y / 2) * 2 + x / 2]
+            at := (y * 4 + x) * 4
+            quadrants[at] = color.r; quadrants[at + 1] = color.g; quadrants[at + 2] = color.b; quadrants[at + 3] = color.a
+        }
+    }
+    picture := LoadTextureFromImage(PixelImage.{cast(*void)*quadrants[0], 4, 4, 1, 7})
+    if picture.id == cast(u32)0 || picture.width != 4 { return 21 }
+    defer UnloadTexture(picture)
+    if MeasureText("Hi", 20) <= 0 { return 22 }
+
+    BeginDrawing()
+    ClearBackground(BLACK)
+    DrawRectangle(10, 10, 20, 20, RED)
+    DrawCircle(100, 40, 12.0, GREEN)
+    BeginMode2D(Camera.{.{150.0, 120.0}, .{0.0, 0.0}, 0.0, 2.0})
+    DrawRectangle(0, 0, 5, 5, BLUE)
+    EndMode2D()
+    BeginScissorMode(0, 100, 50, 10)
+    DrawRectangle(0, 90, 50, 30, WHITE)
+    EndScissorMode()
+    DrawRectangle(60, 100, 10, 10, Color.{100, 0, 0, 255})
+    BeginBlendMode(BLEND_ADDITIVE)
+    DrawRectangle(60, 100, 10, 10, Color.{0, 100, 0, 255})
+    EndBlendMode()
+    BeginTextureMode(target)
+    ClearBackground(BLACK)
+    DrawRectangle(0, 0, 20, 10, RED)
+    DrawRectangle(0, 10, 20, 10, BLUE)
+    EndTextureMode()
+    // A render texture draws upright with a negative source height.
+    DrawTexturePro(target.texture, Rectangle.{0.0, 0.0, 20.0, -20.0}, Rectangle.{170.0, 10.0, 20.0, 20.0}, Vector2.{}, 0.0, WHITE)
+    SetTextureFilter(picture, TEXTURE_FILTER_POINT)
+    DrawTexturePro(picture, Rectangle.{0.0, 0.0, 4.0, 4.0}, Rectangle.{170.0, 40.0, 20.0, 20.0}, Vector2.{}, 0.0, WHITE)
+    // Turned a quarter about its own centre, the red corner moves top right.
+    DrawTexturePro(picture, Rectangle.{0.0, 0.0, 4.0, 4.0}, Rectangle.{180.0, 80.0, 20.0, 20.0}, Vector2.{10.0, 10.0}, 90.0, WHITE)
+    DrawRing(Vector2.{40.0, 70.0}, 6.0, 10.0, 0.0, 360.0, 0, GREEN)
+    DrawLineEx(Vector2.{120.0, 70.0}, Vector2.{150.0, 70.0}, 4.0, BLUE)
+    DrawText("Hi", 10, 130, 20, WHITE)
+    screen := LoadImageFromScreen()
+    EndDrawing()
+    if screen.data == null || screen.width != 200 || screen.height != 160 { return 23 }
+    defer UnloadImage(screen)
+    if !Is(PixelAt(screen, 20, 20), 220, 0, 0) { return 24 }
+    if !Is(PixelAt(screen, 100, 40), 0, 200, 0) || !Is(PixelAt(screen, 5, 5), 0, 0, 0) { return 25 }
+    if !Is(PixelAt(screen, 155, 125), 0, 0, 230) || !Is(PixelAt(screen, 148, 125), 0, 0, 0) { return 26 }
+    if !Is(PixelAt(screen, 25, 105), 255, 255, 255) || !Is(PixelAt(screen, 25, 95), 0, 0, 0) ||
+        !Is(PixelAt(screen, 25, 115), 0, 0, 0) { return 27 }
+    mixed := PixelAt(screen, 65, 105)
+    if !Is(mixed, 100, 100, 0) { print("additive pixel % % % %\n", mixed.r, mixed.g, mixed.b, mixed.a); return 28 }
+    if !Is(PixelAt(screen, 180, 12), 220, 0, 0) || !Is(PixelAt(screen, 180, 27), 0, 0, 230) { return 29 }
+    if !Is(PixelAt(screen, 172, 42), 255, 0, 0) || !Is(PixelAt(screen, 188, 42), 0, 255, 0) ||
+        !Is(PixelAt(screen, 172, 58), 0, 0, 255) || !Is(PixelAt(screen, 188, 58), 255, 255, 255) { return 30 }
+    if !Is(PixelAt(screen, 186, 74), 255, 0, 0) || !Is(PixelAt(screen, 174, 74), 0, 0, 255) { return 31 }
+    if !Is(PixelAt(screen, 48, 70), 0, 200, 0) || !Is(PixelAt(screen, 40, 70), 0, 0, 0) { return 32 }
+    if !Is(PixelAt(screen, 135, 70), 0, 0, 230) || !Is(PixelAt(screen, 135, 76), 0, 0, 0) { return 33 }
+    lit := false
+    for y: cast(s32)130..149 { for x: cast(s32)10..39 { if PixelAt(screen, x, y).r > 150 { lit = true } } }
+    if !lit { return 34 }
+    return 0
+}
+
+Frame :: () { BeginDrawing(); ClearBackground(BLACK); EndDrawing() }
+
+Input :: () -> s32 {
+    Frame()
+    if !PushKey(true, 97) { return 40 }
+    Frame()
+    if !IsKeyPressed(KEY_A) || !IsKeyDown(KEY_A) { return 41 }
+    Frame()
+    if IsKeyPressed(KEY_A) || !IsKeyDown(KEY_A) { return 42 }
+    if !PushKey(false, 97) { return 43 }
+    Frame()
+    if IsKeyDown(KEY_A) { return 44 }
+    if !PushButton(true, 30, 40) { return 45 }
+    Frame()
+    position := GetMousePosition()
+    if !IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || position.x != 30.0 || position.y != 40.0 { return 46 }
+    if !PushButton(false, 30, 40) || !PushMotion(35, 45) { return 47 }
+    Frame()
+    delta := GetMouseDelta()
+    if IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || delta.x != 5.0 || delta.y != 5.0 { return 48 }
+    if !PushFinger(cast(u32)0x700, 0.5, 0.25) { return 49 }
+    Frame()
+    touch := GetTouchPosition(0)
+    if GetTouchPointCount() != 1 || touch.x != 100.0 || touch.y != 40.0 { return 50 }
+    if !PushFinger(cast(u32)0x701, 0.5, 0.25) { return 51 }
+    Frame()
+    if GetTouchPointCount() != 0 { return 52 }
+    return 0
+}
+
+Timing :: () -> s32 {
+    SetTargetFPS(20)
+    Frame()
+    started := Counter()
+    for index: 0..2 { Frame() }
+    elapsed := cast(float64)(Counter() - started) / cast(float64)Frequency()
+    SetTargetFPS(0)
+    if elapsed < 0.14 { return 60 }
+    SetFixedFrameTime(0.5)
+    before := GetTime()
+    Frame()
+    if GetFrameTime() != 0.5 || GetTime() - before != 0.5 { return 61 }
+    SetFixedFrameTime(0.0)
+    SetRandomSeed(42)
+    first: [8]s32
+    for index: 0..7 {
+        first[index] = GetRandomValue(1, 6)
+        if first[index] < 1 || first[index] > 6 { return 62 }
+    }
+    SetRandomSeed(42)
+    for index: 0..7 { if GetRandomValue(1, 6) != first[index] { return 63 } }
+    if GetRandomValue(5, 5) != 5 || GetRandomValue(9, 3) < 3 { return 64 }
+    return 0
+}
+
+Put :: (bytes: []u8, at: s64, value: s64, count: s64) {
+    for index: cast(s64)0..count - 1 { bytes[at + index] = cast(u8)((value >> (index * 8)) & 255) }
+}
+
+// A mono 8 kHz WAV of `frames` frames, as a game ships one in its data.
+WavBytes :: (frames: s32, output: []u8) -> s64 {
+    total := 44 + cast(s64)frames * 2
+    for index: cast(s64)0..total - 1 { output[index] = 0 }
+    tags: [4]string = .["RIFF", "WAVE", "fmt ", "data"]
+    places: [4]s64 = .[0, 8, 12, 36]
+    for tag: 0..3 { for at: 0..3 { output[places[tag] + at] = tags[tag][at] } }
+    Put(output, 4, total - 8, 4); Put(output, 16, 16, 4); Put(output, 20, 1, 2); Put(output, 22, 1, 2)
+    Put(output, 24, 8000, 4); Put(output, 28, 16000, 4); Put(output, 32, 2, 2); Put(output, 34, 16, 2)
+    Put(output, 40, cast(s64)frames * 2, 4)
+    for frame: cast(s64)0..cast(s64)frames - 1 {
+        Put(output, 44 + frame * 2, ifx (frame / 10) % 2 == 0 then 8000 else 65536 - 8000, 2)
+    }
+    return total
+}
+
+Sounds :: (folder: string) -> s32 {
+    InitAudioDevice()
+    if !IsAudioDeviceReady() { return 70 }
+    SetMasterVolume(0.5)
+    bytes: [1644]u8
+    size := WavBytes(800, bytes[:])
+    wave := LoadWaveFromMemory(".wav", *bytes[0], cast(s32)size)
+    if wave.frame_count != cast(u32)800 || wave.sample_rate != cast(u32)8000 || wave.channels != cast(u32)1 { return 71 }
+    effect := LoadSoundFromWave(wave)
+    UnloadWave(wave)
+    if !IsSoundValid(effect) { return 72 }
+    SetSoundVolume(effect, 0.8)
+    PlaySound(effect)
+    StopSound(effect)
+    UnloadSound(effect)
+    path: Vec(u8)
+    BuilderPrint(*path, "%/tone.wav", folder)
+    file := BuilderFinish(path)
+    if !WriteEntireFile(file, TextView(bytes[0:size])) { return 73 }
+    loaded := LoadSound(file)
+    if !IsSoundValid(loaded) { return 74 }
+    UnloadSound(loaded)
+    music := LoadMusicStream(file)
+    if !IsMusicValid(music) || !music.looping { return 75 }
+    music.looping = false
+    SetMusicVolume(music, 0.7)
+    PlayMusicStream(music)
+    UpdateMusicStream(music)
+    SeekMusicStream(music, 0.05)
+    StopMusicStream(music)
+    UnloadMusicStream(music)
+    if IsSoundValid(LoadSound("missing.wav")) || IsMusicValid(LoadMusicStream("missing.ogg")) { return 76 }
+    CloseAudioDevice()
+    return 0
+}
+
+Pictures :: (picture: string) -> s32 {
+    texture := LoadTexture(picture)
+    if texture.id == cast(u32)0 || texture.width != 1254 || texture.height != 1254 { return 80 }
+    SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR)
+    UnloadTexture(texture)
+    if LoadTexture("missing.png").id != cast(u32)0 || !FileExists(picture) || FileExists("missing.png") { return 81 }
+    return 0
+}
+
+ExitKey :: () -> s32 {
+    if WindowShouldClose() { return 90 }
+    SetExitKey(KEY_NULL)
+    if !PushKey(true, 27) { return 91 }
+    Frame()
+    if WindowShouldClose() { return 92 }
+    if !PushKey(false, 27) { return 93 }
+    SetExitKey(KEY_ESCAPE)
+    if !PushKey(true, 27) { return 94 }
+    Frame()
+    if !WindowShouldClose() { return 95 }
+    return 0
+}
+
+main :: (argc: s32, argv: **u8) -> s32 {
+    if argc != 3 { print("usage: sdl_surface_test PICTURE FOLDER\n"); return 2 }
+    InitWindow(200, 160, "Game2D SDL")
+    if !IsWindowReady() || GetScreenWidth() != 200 || GetScreenHeight() != 160 { return 10 }
+    if GetMonitorRefreshRate(GetCurrentMonitor()) < 0 { return 11 }
+    result := Drawing()
+    if result == 0 { result = Input() }
+    if result == 0 { result = Timing() }
+    if result == 0 { result = Sounds(TextFromCString(argv[2])) }
+    if result == 0 { result = Pictures(TextFromCString(argv[1])) }
+    if result == 0 { result = ExitKey() }
+    CloseWindow()
+    if IsWindowReady() && result == 0 { result = 12 }
+    if result != 0 { print("Game2D SDL surface: failure %\n", result) }
+    return result
+}

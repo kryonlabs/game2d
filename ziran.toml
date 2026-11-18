@@ -12,6 +12,6 @@ ref = "3627ea8a90e7f507510dde3cafacd5c74e441932"
 
 [exports]
 Game2D = "src/Game2D/module.zi"
-Raylib = "src/Raylib/module.zi"
+Sdl = "src/Sdl/module.zi"
 navigation = "src/navigation.zi"
 controls = "src/controls.zi"
