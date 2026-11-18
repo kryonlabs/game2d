@@ -520,6 +520,10 @@ PollEvents :: () {
     PadSample()
 }
 
+#if OS == .WEB || #defined(PLATFORM_WEB) {
+    PreloadedPicture :: (path: *u8, width: *s32, height: *s32) -> *u8 #foreign libc "emscripten_get_preloaded_image_data";
+}
+
 // Browsers start audio only after the player has interacted with the page.
 Interacted :: () {
     #if OS == .WEB || #defined(PLATFORM_WEB) {
@@ -531,6 +535,24 @@ Interacted :: () {
 // decodes elsewhere. The caller frees its pixels.
 DecodePicture :: (path: string) -> Pictures.Image {
     #if OS == .WEB || #defined(PLATFORM_WEB) {
+        // A page linked with --use-preload-plugins has the browser decode
+        // its preloaded pictures before main; read those pixels directly.
+        name: [4096]u8
+        if CopyCString(path, name[:]) {
+            width: s32 = 0; height: s32 = 0
+            decoded := PreloadedPicture(*name[0], *width, *height)
+            if decoded != null {
+                defer Free(cast(*void)decoded)
+                picture: Pictures.Image
+                size := cast(s64)width * cast(s64)height * 4
+                if width > 0 && height > 0 && VecResize(picture.pixels, size) {
+                    picture.width = width; picture.height = height
+                    unused Copy(cast(*void)*picture.pixels[0], cast(*void)decoded, cast(u64)size)
+                    return picture
+                }
+                VecFree(picture.pixels)
+            }
+        }
         encoded: Vec(u8)
         defer VecFree(encoded)
         if !ReadFileInto(path, *encoded) || encoded.count == 0 { return .{} }

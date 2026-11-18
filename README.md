@@ -37,7 +37,8 @@ open window resizable.
 The same module builds for the browser with Emscripten: compile the game's
 generated C with `--define PLATFORM_WEB` and link with `-sUSE_SDL=2
 -sUSE_ZLIB=1` (plus `-sUSE_OGG=1 -sUSE_VORBIS=1` for Ogg music) and
-`--js-library` Ziran's `web/ziran_web.js`. There pictures are PNG files, text
+`--js-library` Ziran's `web/ziran_web.js`. There pictures are PNG files (link
+with `--use-preload-plugins` so the browser decodes preloaded ones), text
 draws on the page's canvas, the browser paces frames, and audio plays through
 WebAudio once the player has pressed a key or button. `LoadImageFromMemory` reads PNG bytes; other
 formats load from files with `LoadImage`.
