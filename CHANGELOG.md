@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- `Game2D/Sdl` no longer waits for the target frame rate when vsync already presents at that rate: the two waits made frames slip a vsync (30 fps on a Pixel 4a, 18 on a Moto e6 play).
+- `Game2D/Sdl` no longer spins waiting for the target frame rate when vsync already presents at that rate.
 
 - `Game2D/Sdl` runs on Android under SDL2's activity (`PLATFORM_ANDROID`): `InitWindow(0, 0)` fills the display, pictures decode as PNG in Ziran and text draws with FreeType.
 
