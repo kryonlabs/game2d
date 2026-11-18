@@ -1,11 +1,11 @@
 // SDL2 game surface for Ziran games on Kryon. A game opens a window drawn by
-// SDL's accelerated renderer, reads keyboard, mouse and touch input, loads
-// textures and render targets, draws shapes and text, and plays sounds and
-// music, with the call names games already use (InitWindow, BeginDrawing,
-// DrawTexturePro, PlaySound...). Pictures decode through Kryon's
-// image_pixels, text draws with Kryon's text raster, and audio mixes in
-// Ziran's std/audio. Color, Texture2D, Vector2, Rectangle and Camera are
-// Kryon's own types.
+// SDL's accelerated renderer, reads keyboard, mouse, touch and gamepad input,
+// loads pictures, textures and render targets, draws shapes and text, and
+// plays sounds and music, with the call names games already use (InitWindow,
+// BeginDrawing, DrawTexturePro, PlaySound...). Pictures decode through
+// Kryon's image_pixels (PNG bytes through std/png_linux), text draws with
+// Kryon's text raster, and audio mixes in Ziran's std/audio. Color,
+// Texture2D, Vector2, Rectangle and Camera are Kryon's own types.
 #import "std/c_string"
 #import "std/file"
 #import "std/byte_text_linux"
@@ -14,6 +14,7 @@ using Drawing :: #import "kryon/drawing_props";
 Pixels :: #import "kryon/image_pixels";
 Text :: #import "kryon/text_pixels";
 Raster :: #import "kryon/Cairo";
+Png :: #import "std/png_linux";
 Audio :: #import "std/audio";
 Sink :: #import "std/audio_sink";
 WavFile :: #import "std/audio_wav";
@@ -100,6 +101,37 @@ FLAG_WINDOW_RESIZABLE :: 4;
 FLAG_VSYNC_HINT :: 64;
 FLAG_WINDOW_HIDDEN :: 128;
 FLAG_WINDOW_ALWAYS_RUN :: 256;
+KEY_F11 :: 300;
+KEY_LEFT_SHIFT :: 340;
+KEY_RIGHT_SHIFT :: 344;
+// Gamepad buttons: the left face is the d-pad, the right face the A/B/X/Y
+// diamond, the triggers' second level the analog triggers, the middle row
+// Back, Guide and Start.
+GAMEPAD_BUTTON_UNKNOWN :: 0;
+GAMEPAD_BUTTON_LEFT_FACE_UP :: 1;
+GAMEPAD_BUTTON_LEFT_FACE_RIGHT :: 2;
+GAMEPAD_BUTTON_LEFT_FACE_DOWN :: 3;
+GAMEPAD_BUTTON_LEFT_FACE_LEFT :: 4;
+GAMEPAD_BUTTON_RIGHT_FACE_UP :: 5;
+GAMEPAD_BUTTON_RIGHT_FACE_RIGHT :: 6;
+GAMEPAD_BUTTON_RIGHT_FACE_DOWN :: 7;
+GAMEPAD_BUTTON_RIGHT_FACE_LEFT :: 8;
+GAMEPAD_BUTTON_LEFT_TRIGGER_1 :: 9;
+GAMEPAD_BUTTON_LEFT_TRIGGER_2 :: 10;
+GAMEPAD_BUTTON_RIGHT_TRIGGER_1 :: 11;
+GAMEPAD_BUTTON_RIGHT_TRIGGER_2 :: 12;
+GAMEPAD_BUTTON_MIDDLE_LEFT :: 13;
+GAMEPAD_BUTTON_MIDDLE :: 14;
+GAMEPAD_BUTTON_MIDDLE_RIGHT :: 15;
+GAMEPAD_BUTTON_LEFT_THUMB :: 16;
+GAMEPAD_BUTTON_RIGHT_THUMB :: 17;
+// Sticks read -1 to 1, triggers 0 (released) to 1.
+GAMEPAD_AXIS_LEFT_X :: 0;
+GAMEPAD_AXIS_LEFT_Y :: 1;
+GAMEPAD_AXIS_RIGHT_X :: 2;
+GAMEPAD_AXIS_RIGHT_Y :: 3;
+GAMEPAD_AXIS_LEFT_TRIGGER :: 4;
+GAMEPAD_AXIS_RIGHT_TRIGGER :: 5;
 
 WHITE :: Color.{255, 255, 255, 255};
 BLACK :: Color.{0, 0, 0, 255};
@@ -222,6 +254,17 @@ SdlDisplayMode :: (display: s32, mode: *DisplayMode) -> s32 #foreign sdl "SDL_Ge
 SdlCounter :: () -> u64 #foreign sdl "SDL_GetPerformanceCounter";
 SdlFrequency :: () -> u64 #foreign sdl "SDL_GetPerformanceFrequency";
 SdlDelay :: (milliseconds: u32) #foreign sdl "SDL_Delay";
+SdlSetFullscreen :: (window: *void, flags: u32) -> s32 #foreign sdl "SDL_SetWindowFullscreen";
+SdlWindowFlags :: (window: *void) -> u32 #foreign sdl "SDL_GetWindowFlags";
+SdlLogicalSize :: (renderer: *void, width: s32, height: s32) -> s32 #foreign sdl "SDL_RenderSetLogicalSize";
+SdlSurfaceFrom :: (pixels: *void, width: s32, height: s32, depth: s32, pitch: s32, format: u32) -> *void #foreign sdl "SDL_CreateRGBSurfaceWithFormatFrom";
+SdlFreeSurface :: (surface: *void) #foreign sdl "SDL_FreeSurface";
+SdlSetIcon :: (window: *void, surface: *void) #foreign sdl "SDL_SetWindowIcon";
+SdlPadOpen :: (index: s32) -> *void #foreign sdl "SDL_GameControllerOpen";
+SdlPadClose :: (pad: *void) #foreign sdl "SDL_GameControllerClose";
+SdlPadAttached :: (pad: *void) -> s32 #foreign sdl "SDL_GameControllerGetAttached";
+SdlPadButton :: (pad: *void, button: s32) -> u8 #foreign sdl "SDL_GameControllerGetButton";
+SdlPadAxis :: (pad: *void, axis: s32) -> s16 #foreign sdl "SDL_GameControllerGetAxis";
 Allocate :: (size: u64) -> *void #foreign libc "malloc";
 Free :: (value: *void) #foreign libc "free";
 Copy :: (output: *void, input: *void, count: u64) -> *void #foreign libc "memcpy";
@@ -235,6 +278,11 @@ FmodRaw :: (value: float32, divisor: float32) -> float32 #foreign libm "fmodf";
 AbsRaw :: (value: s32) -> s32 #foreign libc "abs";
 
 INIT_VIDEO :: 0x20;
+INIT_GAMECONTROLLER :: 0x2000;
+FULLSCREEN :: 0x1;
+FULLSCREEN_DESKTOP :: 0x1001;
+GAMEPADS :: 4;
+PAD_BUTTONS :: 18;
 // SDL_PIXELFORMAT_ABGR8888: R, G, B, A bytes in memory.
 RGBA :: 0x16762004;
 ACCESS_STATIC :: 0;
@@ -303,6 +351,59 @@ fixed_frame: float32;
 fixed_elapsed: float64;
 random_state: u64 = 0x853c49e6748fea9b;
 audio_open: bool;
+pads: [GAMEPADS]*void;
+pad_down: [GAMEPADS][PAD_BUTTONS]bool;
+pad_pressed: [GAMEPADS][PAD_BUTTONS]bool;
+// The game's own size while fullscreen scales it to the screen; 0 windowed.
+logical_width: s32;
+logical_height: s32;
+
+ControllerEvent :: struct {
+    kind: u32
+    timestamp: u32
+    which: s32
+}
+
+// The window's size in game coordinates.
+ScreenSize :: () -> (width: s32, height: s32) {
+    if logical_width > 0 && logical_height > 0 { return logical_width, logical_height }
+    width: s32 = 0; height: s32 = 0
+    if window != null { SdlWindowSize(window, *width, *height) }
+    return width, height
+}
+
+// A gamepad button in SDL's controller numbering, or a trigger axis as
+// -5 (left) or -6 (right); -1 for none.
+PadSource :: (button: s32) -> s32 {
+    table: [PAD_BUTTONS]s32 = .[-1, 11, 14, 12, 13, 3, 1, 0, 2, 9, -5, 10, -6, 4, 5, 6, 7, 8]
+    if button < 0 || button >= PAD_BUTTONS { return -1 }
+    return table[button]
+}
+
+PadOpen :: (index: s32) {
+    for slot: 0..GAMEPADS - 1 {
+        if pads[slot] == null {
+            pads[slot] = SdlPadOpen(index)
+            return
+        }
+    }
+}
+
+// Closes unplugged pads and samples every button for this frame.
+PadSample :: () {
+    for slot: 0..GAMEPADS - 1 {
+        pad := pads[slot]
+        if pad != null && SdlPadAttached(pad) == 0 { SdlPadClose(pad); pads[slot] = null; pad = null }
+        for button: 0..PAD_BUTTONS - 1 {
+            down := false
+            source := PadSource(cast(s32)button)
+            if pad != null && source >= 0 { down = SdlPadButton(pad, source) != cast(u8)0 }
+            if pad != null && source < -1 { down = cast(s32)SdlPadAxis(pad, -source - 1) > 16384 }
+            pad_pressed[slot][button] = down && !pad_down[slot][button]
+            pad_down[slot][button] = down
+        }
+    }
+}
 
 // SDL keycodes to the game key values: letters as uppercase ASCII, named
 // keys from 256 (Escape).
@@ -385,10 +486,11 @@ PollEvents :: () {
                 buttons_down[button] = down
             }
         }
+        // SDL reports every pad present at start-up as added too.
+        if event.kind == cast(u32)0x653 { PadOpen((cast(*ControllerEvent)*event).which) }
         if event.kind >= cast(u32)0x700 && event.kind <= cast(u32)0x702 {
             finger := cast(*FingerEvent)*event
-            width: s32 = 0; height: s32 = 0
-            if window != null { SdlWindowSize(window, *width, *height) }
+            width, height := ScreenSize()
             at := TouchFind(finger.finger)
             if event.kind == cast(u32)0x701 {
                 if at >= 0 {
@@ -404,6 +506,7 @@ PollEvents :: () {
             }
         }
     }
+    PadSample()
 }
 
 // The active 2D camera's view of a world point.
@@ -564,6 +667,16 @@ NextRandom :: () -> u32 {
     return cast(u32)(random_state >> cast(u64)33)
 }
 
+// A malloc copy of decoded RGBA, as PixelImage owns it.
+OwnedPixels :: (width: s32, height: s32, pixels: []u8) -> PixelImage {
+    size := cast(s64)width * cast(s64)height * 4
+    if width <= 0 || height <= 0 || pixels.count < size { return .{} }
+    data := Allocate(cast(u64)size)
+    if data == null { return .{} }
+    unused Copy(data, cast(*void)*pixels[0], cast(u64)size)
+    return .{data, width, height, 1, 7}
+}
+
 EmptyWave :: () -> Wave { return .{0, 0, 0, 0, null} }
 EmptySound :: () -> Sound { return .{.{-1, 0}, 0} }
 EmptyMusic :: () -> Music { return .{.{-1, 0}, 0, false} }
@@ -601,6 +714,8 @@ SetConfigFlags :: (flags: u32) { config_flags = flags }
 InitWindow :: (width: s32, height: s32, title: string) {
     if window != null || width <= 0 || height <= 0 { return }
     if SdlInit(cast(u32)INIT_VIDEO) != 0 { return }
+    // Gamepads are optional: a system without them still opens the window.
+    unused SdlInit(cast(u32)INIT_GAMECONTROLLER)
     name: [256]u8
     if !CopyCString(title, name[:]) { return }
     flags := ifx (config_flags & cast(u32)FLAG_WINDOW_HIDDEN) != cast(u32)0 then cast(u32)0x8 else cast(u32)0x4
@@ -636,8 +751,14 @@ CloseWindow :: () {
         if text_cache[index].handle != null { SdlDestroyTexture(text_cache[index].handle); text_cache[index] = .{} }
     }
     if white != null { SdlDestroyTexture(white); white = null }
+    for slot: 0..GAMEPADS - 1 {
+        if pads[slot] != null { SdlPadClose(pads[slot]); pads[slot] = null }
+        for button: 0..PAD_BUTTONS - 1 { pad_down[slot][button] = false; pad_pressed[slot][button] = false }
+    }
+    logical_width = 0; logical_height = 0
     SdlDestroyRenderer(renderer); renderer = null
     SdlDestroyWindow(window); window = null
+    SdlQuit(cast(u32)INIT_GAMECONTROLLER)
     SdlQuit(cast(u32)INIT_VIDEO)
 }
 
@@ -656,16 +777,45 @@ SetTargetFPS :: (fps: s32) { target_fps = ifx fps < 0 then 0 else fps }
 // pacing: headless and replayed runs step deterministically. 0 measures time.
 SetFixedFrameTime :: (seconds: float32) { fixed_frame = ifx seconds > 0.0 then seconds else 0.0 }
 
+// The window's size in game coordinates: fullscreen keeps the size the
+// window had.
 GetScreenWidth :: () -> s32 {
-    width: s32 = 0; height: s32 = 0
-    if window != null { SdlWindowSize(window, *width, *height) }
+    width, height := ScreenSize()
     return width
 }
 
 GetScreenHeight :: () -> s32 {
-    width: s32 = 0; height: s32 = 0
-    if window != null { SdlWindowSize(window, *width, *height) }
+    width, height := ScreenSize()
     return height
+}
+
+// Fills the screen with the game scaled to fit, keeping its own size and
+// aspect; toggling again restores the window.
+ToggleFullscreen :: () {
+    if window == null || renderer == null { return }
+    if IsWindowFullscreen() {
+        if SdlSetFullscreen(window, 0) != 0 { return }
+        unused SdlLogicalSize(renderer, 0, 0)
+        logical_width = 0; logical_height = 0
+        return
+    }
+    width, height := ScreenSize()
+    if SdlSetFullscreen(window, cast(u32)FULLSCREEN_DESKTOP) != 0 { return }
+    logical_width = width; logical_height = height
+    unused SdlLogicalSize(renderer, width, height)
+}
+
+IsWindowFullscreen :: () -> bool {
+    return window != null && (SdlWindowFlags(window) & cast(u32)FULLSCREEN) != cast(u32)0
+}
+
+// The window's icon from RGBA pixels (format 7).
+SetWindowIcon :: (image: PixelImage) {
+    if window == null || image.data == null || image.width <= 0 || image.height <= 0 || image.format != 7 { return }
+    surface := SdlSurfaceFrom(image.data, image.width, image.height, 32, image.width * 4, cast(u32)RGBA)
+    if surface == null { return }
+    SdlSetIcon(window, surface)
+    SdlFreeSurface(surface)
 }
 
 GetCurrentMonitor :: () -> s32 {
@@ -737,6 +887,18 @@ IsKeyDown :: (key: s32) -> bool { return key > 0 && key < 512 && keys_down[key] 
 IsMouseButtonPressed :: (button: s32) -> bool { return button >= 0 && button < 3 && buttons_pressed[button] }
 GetMousePosition :: () -> Vector2 { return mouse }
 GetMouseDelta :: () -> Vector2 { return .{mouse.x - mouse_previous.x, mouse.y - mouse_previous.y} }
+IsGamepadAvailable :: (gamepad: s32) -> bool { return gamepad >= 0 && gamepad < GAMEPADS && pads[gamepad] != null }
+IsGamepadButtonDown :: (gamepad: s32, button: s32) -> bool {
+    return IsGamepadAvailable(gamepad) && button > 0 && button < PAD_BUTTONS && pad_down[gamepad][button]
+}
+IsGamepadButtonPressed :: (gamepad: s32, button: s32) -> bool {
+    return IsGamepadAvailable(gamepad) && button > 0 && button < PAD_BUTTONS && pad_pressed[gamepad][button]
+}
+GetGamepadAxisMovement :: (gamepad: s32, axis: s32) -> float32 {
+    if !IsGamepadAvailable(gamepad) || axis < 0 || axis > 5 { return 0.0 }
+    value := cast(float32)SdlPadAxis(pads[gamepad], axis) / 32767.0
+    return ifx value < -1.0 then -1.0 else value
+}
 GetTouchPointCount :: () -> s32 { return touch_count }
 GetTouchPosition :: (index: s32) -> Vector2 {
     if index < 0 || index >= touch_count { return .{} }
@@ -999,6 +1161,38 @@ LoadImageFromScreen :: () -> PixelImage {
 
 UnloadImage :: (image: PixelImage) { if image.data != null { Free(image.data) } }
 
+IsImageValid :: (image: PixelImage) -> bool { return image.data != null && image.width > 0 && image.height > 0 }
+
+// A width by height picture of one color.
+GenImageColor :: (width: s32, height: s32, color: Color) -> PixelImage {
+    if width <= 0 || height <= 0 || width > 16384 || height > 16384 { return .{} }
+    count := cast(s64)width * cast(s64)height
+    data := cast(*u8)Allocate(cast(u64)count * cast(u64)4)
+    if data == null { return .{} }
+    for index: cast(s64)0..count - 1 {
+        data[index * 4] = color.r; data[index * 4 + 1] = color.g
+        data[index * 4 + 2] = color.b; data[index * 4 + 3] = color.a
+    }
+    return .{cast(*void)data, width, height, 1, 7}
+}
+
+// A picture file in any format Kryon decodes, as RGBA pixels the game owns.
+LoadImage :: (path: string) -> PixelImage {
+    picture := Pixels.LoadImagePixels(path)
+    defer VecFree(picture.pixels)
+    return OwnedPixels(picture.width, picture.height, picture.pixels[:])
+}
+
+// PNG bytes as RGBA pixels the game owns; other formats load from files with
+// LoadImage.
+LoadImageFromMemory :: (file_type: string, data: *u8, size: s32) -> PixelImage {
+    unused file_type
+    if data == null || size <= 0 { return .{} }
+    picture := Png.ReadPNG(BytesFromPointer(data, cast(u64)size))
+    defer VecFree(picture.pixels)
+    return OwnedPixels(picture.width, picture.height, picture.pixels[:])
+}
+
 // Audio, mixed by std/audio and played through the platform's output.
 InitAudioDevice :: () {
     if audio_open { return }
@@ -1066,6 +1260,15 @@ UnloadWave :: (wave: Wave) { if wave.data != null { Free(wave.data) } }
 // Music streams from its file and loops unless `looping` is cleared.
 LoadMusicStream :: (path: string) -> Music {
     voice := Audio.AudioLoadFile(path, true)
+    if voice.slot < 0 { return EmptyMusic() }
+    return .{voice, 1, true}
+}
+
+// Music from file bytes in a format LoadMusicStream reads; the bytes are copied.
+LoadMusicStreamFromMemory :: (file_type: string, data: *u8, size: s32) -> Music {
+    unused file_type
+    if data == null || size <= 0 { return EmptyMusic() }
+    voice := Audio.AudioLoad(TextView(BytesFromPointer(data, cast(u64)size)), true)
     if voice.slot < 0 { return EmptyMusic() }
     return .{voice, 1, true}
 }

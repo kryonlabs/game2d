@@ -1,6 +1,7 @@
 // Game2D's SDL2 surface on a private display with SDL's software renderer
 // and dummy audio: shapes, camera, scissor, blending, render targets,
-// textures, text, input, timing, random values and audio.
+// textures, pictures from files and bytes, window icon, fullscreen,
+// gamepads, text, input, timing, random values and audio.
 //     sdl_surface_test PICTURE.png FOLDER
 using Game :: #import "Sdl";
 #import "kryon/geometry"
@@ -257,6 +258,11 @@ Sounds :: (folder: string) -> s32 {
     loaded := LoadSound(file)
     if !IsSoundValid(loaded) { return 74 }
     UnloadSound(loaded)
+    streamed := LoadMusicStreamFromMemory(".wav", *bytes[0], cast(s32)size)
+    if !IsMusicValid(streamed) || !streamed.looping { return 77 }
+    PlayMusicStream(streamed)
+    UnloadMusicStream(streamed)
+    if IsMusicValid(LoadMusicStreamFromMemory(".wav", *bytes[0], 0)) { return 78 }
     music := LoadMusicStream(file)
     if !IsMusicValid(music) || !music.looping { return 75 }
     music.looping = false
@@ -277,6 +283,47 @@ Pictures :: (picture: string) -> s32 {
     SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR)
     UnloadTexture(texture)
     if LoadTexture("missing.png").id != cast(u32)0 || !FileExists(picture) || FileExists("missing.png") { return 81 }
+    image := LoadImage(picture)
+    if !IsImageValid(image) || image.width != 1254 || image.height != 1254 || image.format != 7 { return 82 }
+    encoded: Vec(u8)
+    defer VecFree(encoded)
+    if !ReadFileInto(picture, *encoded) || encoded.count == 0 { return 83 }
+    decoded := LoadImageFromMemory(".png", *encoded[0], cast(s32)encoded.count)
+    if !IsImageValid(decoded) || decoded.width != 1254 || decoded.height != 1254 { return 84 }
+    // The file and the bytes decode to the same pixels.
+    same := true
+    for index: cast(s64)0..cast(s64)1254 * 1254 * 4 - 1 {
+        if (cast(*u8)image.data)[index] != (cast(*u8)decoded.data)[index] { same = false; break }
+    }
+    UnloadImage(image)
+    UnloadImage(decoded)
+    if !same { return 85 }
+    if IsImageValid(LoadImageFromMemory(".png", *encoded[1], cast(s32)encoded.count - 1)) { return 86 }
+    icon := GenImageColor(3, 2, Color.{10, 20, 30, 40})
+    if !IsImageValid(icon) || icon.width != 3 || icon.height != 2 || icon.format != 7 { return 87 }
+    last := cast(*u8)icon.data
+    if last[20] != cast(u8)10 || last[21] != cast(u8)20 || last[22] != cast(u8)30 || last[23] != cast(u8)40 { return 88 }
+    SetWindowIcon(icon)
+    UnloadImage(icon)
+    if IsImageValid(GenImageColor(0, 2, WHITE)) { return 89 }
+    return 0
+}
+
+// Fullscreen keeps the game's size; no gamepad answers for a missing pad.
+WindowAndPads :: () -> s32 {
+    if IsWindowFullscreen() { return 100 }
+    ToggleFullscreen()
+    Frame()
+    if !IsWindowFullscreen() || GetScreenWidth() != 200 || GetScreenHeight() != 160 { return 101 }
+    ToggleFullscreen()
+    Frame()
+    if IsWindowFullscreen() || GetScreenWidth() != 200 || GetScreenHeight() != 160 { return 102 }
+    if IsGamepadAvailable(-1) || IsGamepadAvailable(4) { return 103 }
+    for pad: cast(s32)0..3 {
+        if IsGamepadAvailable(pad) { continue }
+        if IsGamepadButtonDown(pad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_MIDDLE_RIGHT) { return 104 }
+        if GetGamepadAxisMovement(pad, GAMEPAD_AXIS_LEFT_X) != 0.0 { return 105 }
+    }
     return 0
 }
 
@@ -304,6 +351,7 @@ main :: (argc: s32, argv: **u8) -> s32 {
     if result == 0 { result = Timing() }
     if result == 0 { result = Sounds(TextFromCString(argv[2])) }
     if result == 0 { result = Pictures(TextFromCString(argv[1])) }
+    if result == 0 { result = WindowAndPads() }
     if result == 0 { result = ExitKey() }
     CloseWindow()
     if IsWindowReady() && result == 0 { result = 12 }

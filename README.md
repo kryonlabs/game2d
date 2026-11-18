@@ -4,8 +4,8 @@ Game2D is an optional Ziran package for 2D games that use Kryon. Kryon provides
 the shared `Rectangle` and `Circle` values. The `Game2D` module adds collision
 helpers. The `Sdl` module is a game's window: SDL2 draws it with its
 accelerated renderer (or SDL's software renderer where there is no GPU), and
-the game reads keyboard, mouse and touch input, loads textures and render
-targets, draws shapes and text, and plays sounds and music with the call names
+the game reads keyboard, mouse, touch and gamepad input, loads pictures,
+textures and render targets, draws shapes and text, and plays sounds and music with the call names
 games already use (`InitWindow`, `BeginDrawing`, `DrawTexturePro`,
 `PlaySound`...). Pictures decode through Kryon's `image_pixels`, text draws
 with Kryon's text raster, and audio mixes in Ziran's `std/audio`. Kryon keeps
@@ -18,14 +18,19 @@ DirectionPad and buttons. Callers supply translated labels, persist their
 chosen mode, and retain their own game rules, title artwork and account actions.
 Neither module depends on a publisher, account service or game catalog.
 
-`Sdl` links SDL2 and, for text, Kryon's Cairo/Pango raster (`pkg-config --libs
-sdl2 cairo pangocairo fontconfig freetype2 glib-2.0`). It reads WAV; a game that
+`Sdl` links SDL2, zlib for PNG bytes and, for text, Kryon's Cairo/Pango raster
+(`pkg-config --libs sdl2 zlib cairo pangocairo fontconfig freetype2 glib-2.0`). It reads WAV; a game that
 ships Ogg Vorbis or MP3 also imports `std/audio_decode_vorbis` or
 `std/audio_decode_mp3` and links that codec, so a game carries only the decoders
 it uses. Render textures draw upright with a negative source height, as games
 already draw them. `SetFixedFrameTime(seconds)` makes every frame last exactly
 that long for `GetFrameTime` and `GetTime`, for deterministic headless and
 replayed runs (SDL's `offscreen` or `dummy` video driver needs no display).
+Gamepads use raylib's button and axis numbering (`GAMEPAD_BUTTON_*`,
+`GAMEPAD_AXIS_*`) over SDL's game controllers. `ToggleFullscreen` scales the
+game to the screen at its own size, so `GetScreenWidth` and mouse positions
+keep the window's coordinates. `LoadImageFromMemory` reads PNG bytes; other
+formats load from files with `LoadImage`.
 Run `ziran update` to refresh all packages, or `ziran update Game2D` to refresh
 Game2D and its transitive Kryon dependency.
 
