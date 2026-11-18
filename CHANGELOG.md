@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- `Game2D/Sdl` queues shapes and pictures that share a texture and blend mode and sends each run to SDL as one geometry call: Kasaival's frames went from about 4,500 SDL calls to a few dozen.
 - `Game2D/Sdl` no longer spins waiting for the target frame rate when vsync already presents at that rate.
 
 - `Game2D/Sdl` runs on Android under SDL2's activity (`PLATFORM_ANDROID`): `InitWindow(0, 0)` fills the display, pictures decode as PNG in Ziran and text draws with FreeType.

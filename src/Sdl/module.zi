@@ -355,6 +355,18 @@ touch_count: s32;
 camera: Camera;
 camera_active: bool;
 blend: s32 = SDL_BLEND;
+// Shapes and pictures wait here while they share a texture and blend mode,
+// then reach SDL as one geometry call: a busy game draws thousands of shapes
+// a frame, and SDL's work per call dominated phone frames. Anything that
+// draws otherwise, changes a queued texture or reads the frame flushes first.
+BATCH_VERTICES :: 8192;
+BATCH_INDICES :: 24576;
+batch_vertices: [BATCH_VERTICES]Vertex;
+batch_indices: [BATCH_INDICES]s32;
+batch_vertex_count: s32;
+batch_index_count: s32;
+batch_texture: *void;
+batch_blend: s32;
 scissor: SdlRect;
 scissor_active: bool;
 time_frequency: u64 = 1;
@@ -603,10 +615,59 @@ Emit :: (vertices: []Vertex, indices: []s32, picture: *void) {
             vertices[index].v = cast(float32)((index >> 1) & 1)
         }
     }
-    if texture != null { unused SdlTextureBlend(texture, blend) }
-    index_pointer: *s32 = null
-    if indices.count > 0 { index_pointer = *indices[0] }
-    unused SdlGeometry(renderer, texture, *vertices[0], cast(s32)vertices.count, index_pointer, cast(s32)indices.count)
+    // SDL refuses a whole call over one bad shape, so each shape is checked
+    // here and a bad one is dropped alone, as a call of its own would be.
+    if vertices.count < 3 { return }
+    corners := ifx indices.count > 0 then indices.count else vertices.count
+    if corners % 3 != 0 { return }
+    if texture != null {
+        for index: cast(s64)0..vertices.count - 1 {
+            u := vertices[index].u; v := vertices[index].v
+            if u < 0.0 || v < 0.0 || u > 1.0 || v > 1.0 { return }
+        }
+    }
+    for index: cast(s64)0..indices.count - 1 {
+        if indices[index] < 0 || cast(s64)indices[index] >= vertices.count { return }
+    }
+    if vertices.count > BATCH_VERTICES || corners > BATCH_INDICES {
+        Flush()
+        if texture != null { unused SdlTextureBlend(texture, blend) }
+        index_pointer: *s32 = null
+        if indices.count > 0 { index_pointer = *indices[0] }
+        unused SdlGeometry(renderer, texture, *vertices[0], cast(s32)vertices.count, index_pointer, cast(s32)indices.count)
+        return
+    }
+    if texture != batch_texture || blend != batch_blend ||
+        cast(s64)batch_vertex_count + vertices.count > BATCH_VERTICES ||
+        cast(s64)batch_index_count + corners > BATCH_INDICES {
+        Flush()
+        batch_texture = texture; batch_blend = blend
+    }
+    base := batch_vertex_count
+    for index: cast(s64)0..vertices.count - 1 { batch_vertices[cast(s64)base + index] = vertices[index] }
+    if indices.count > 0 {
+        for index: cast(s64)0..indices.count - 1 { batch_indices[cast(s64)batch_index_count + index] = base + indices[index] }
+    } else {
+        for index: cast(s64)0..vertices.count - 1 { batch_indices[cast(s64)batch_index_count + index] = base + cast(s32)index }
+    }
+    batch_vertex_count += cast(s32)vertices.count
+    batch_index_count += cast(s32)corners
+}
+
+// Sends the queued shapes to SDL.
+Flush :: () {
+    if batch_index_count == 0 { return }
+    if renderer != null {
+        if batch_texture != null { unused SdlTextureBlend(batch_texture, batch_blend) }
+        unused SdlGeometry(renderer, batch_texture, *batch_vertices[0], batch_vertex_count, *batch_indices[0], batch_index_count)
+    }
+    batch_vertex_count = 0; batch_index_count = 0
+}
+
+// Destroys a texture once the shapes queued with it are drawn.
+DestroyTexture :: (handle: *void) {
+    Flush()
+    SdlDestroyTexture(handle)
 }
 
 // A filled polygon around a centre: `count` rim points at radius rx, ry
@@ -697,7 +758,7 @@ TextTexture :: (value: string, size: s32) -> *TextEntry {
         if text_cache[index].used < text_cache[chosen].used { chosen = index }
     }
     entry := *text_cache[chosen]
-    if entry.handle != null { SdlDestroyTexture(entry.handle) }
+    if entry.handle != null { DestroyTexture(entry.handle) }
     entry.handle = handle; entry.size = size; entry.width = width; entry.height = height
     entry.length = ifx cacheable then value.count else cast(s64)-1
     if cacheable { for at: cast(s64)0..value.count - 1 { entry.bytes[at] = value[at] } }
@@ -719,6 +780,7 @@ TexturedQuad :: (handle: *void, corners: [4]Vector2, u0: float32, v0: float32, u
 
 ApplyScissor :: () {
     if renderer == null { return }
+    Flush()
     if scissor_active { unused SdlClipRect(renderer, *scissor) } else { unused SdlClipRect(renderer, null) }
 }
 
@@ -816,6 +878,7 @@ InitWindow :: (width: s32, height: s32, title: string) {
 
 CloseWindow :: () {
     if window == null { return }
+    batch_vertex_count = 0; batch_index_count = 0
     for index: 0..TEXTURES - 1 {
         if textures[index].handle != null { SdlDestroyTexture(textures[index].handle); textures[index] = .{} }
     }
@@ -866,6 +929,7 @@ GetScreenHeight :: () -> s32 {
 // aspect; toggling again restores the window.
 ToggleFullscreen :: () {
     if window == null || renderer == null { return }
+    Flush()
     if IsWindowFullscreen() {
         if SdlSetFullscreen(window, 0) != 0 { return }
         unused SdlLogicalSize(renderer, 0, 0)
@@ -923,12 +987,13 @@ GetMonitorRefreshRate :: (monitor: s32) -> s32 {
 
 BeginDrawing :: () {
     camera_active = false
-    if renderer != null { unused SdlTarget(renderer, null); ApplyScissor() }
+    if renderer != null { Flush(); unused SdlTarget(renderer, null); ApplyScissor() }
 }
 
 // Shows the frame, waits for the target rate (unless vsync already paces it
 // at that rate) and reads the input the next frame sees.
 EndDrawing :: () {
+    Flush()
     if renderer != null { SdlPresent(renderer) }
     frames += cast(u64)1
     if fixed_frame > 0.0 {
@@ -1000,6 +1065,7 @@ GetTouchPosition :: (index: s32) -> Vector2 {
 // Drawing.
 ClearBackground :: (color: Color) {
     if renderer == null { return }
+    Flush()
     unused SdlDrawColor(renderer, color.r, color.g, color.b, color.a)
     unused SdlClear(renderer)
 }
@@ -1102,7 +1168,7 @@ DrawText :: (value: string, pos_x: s32, pos_y: s32, font_size: s32, color: Color
     right := x + cast(float32)entry.width; bottom := y + cast(float32)entry.height
     corners: [4]Vector2 = .[.{x, y}, .{right, y}, .{right, bottom}, .{x, bottom}]
     TexturedQuad(entry.handle, corners, 0.0, 0.0, 1.0, 1.0, color)
-    if entry.length < 0 { SdlDestroyTexture(entry.handle); entry.handle = null }
+    if entry.length < 0 { DestroyTexture(entry.handle); entry.handle = null }
 }
 
 MeasureText :: (value: string, font_size: s32) -> s32 {
@@ -1158,19 +1224,20 @@ LoadTextureFromImage :: (image: PixelImage) -> Texture2D {
 UpdateTexture :: (texture: Texture2D, pixels: *void) {
     slot := Slot(texture.id)
     if slot == null || pixels == null { return }
+    Flush()
     unused SdlUpdateTexture(slot.handle, null, pixels, slot.width * 4)
 }
 
 UnloadTexture :: (texture: Texture2D) {
     slot := Slot(texture.id)
     if slot == null || slot.target { return }
-    SdlDestroyTexture(slot.handle)
+    DestroyTexture(slot.handle)
     slot.* = .{}
 }
 
 SetTextureFilter :: (texture: Texture2D, filter: s32) {
     slot := Slot(texture.id)
-    if slot != null { unused SdlScaleMode(slot.handle, ifx filter == TEXTURE_FILTER_POINT then 0 else 1) }
+    if slot != null { Flush(); unused SdlScaleMode(slot.handle, ifx filter == TEXTURE_FILTER_POINT then 0 else 1) }
 }
 
 // The part `source` of a texture into `destination`, turned `rotation`
@@ -1220,7 +1287,7 @@ LoadRenderTexture :: (width: s32, height: s32) -> RenderTexture2D {
 UnloadRenderTexture :: (target: RenderTexture2D) {
     slot := Slot(target.id)
     if slot == null || !slot.target { return }
-    SdlDestroyTexture(slot.handle)
+    DestroyTexture(slot.handle)
     slot.* = .{}
 }
 
@@ -1233,18 +1300,20 @@ BeginTextureMode :: (target: RenderTexture2D) {
     slot := Slot(target.id)
     if renderer == null || slot == null || !slot.target { return }
     camera_active = false
+    Flush()
     unused SdlTarget(renderer, slot.handle)
     ApplyScissor()
 }
 
 EndTextureMode :: () {
     camera_active = false
-    if renderer != null { unused SdlTarget(renderer, null); ApplyScissor() }
+    if renderer != null { Flush(); unused SdlTarget(renderer, null); ApplyScissor() }
 }
 
 // The frame drawn so far as RGBA pixels; UnloadImage frees them.
 LoadImageFromScreen :: () -> PixelImage {
     width: s32 = 0; height: s32 = 0
+    Flush()
     if renderer == null || SdlOutputSize(renderer, *width, *height) != 0 || width <= 0 || height <= 0 { return .{} }
     data := Allocate(cast(u64)width * cast(u64)height * cast(u64)4)
     if data == null { return .{} }
