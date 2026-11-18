@@ -256,6 +256,7 @@ SdlFrequency :: () -> u64 #foreign sdl "SDL_GetPerformanceFrequency";
 SdlDelay :: (milliseconds: u32) #foreign sdl "SDL_Delay";
 SdlSetFullscreen :: (window: *void, flags: u32) -> s32 #foreign sdl "SDL_SetWindowFullscreen";
 SdlWindowFlags :: (window: *void) -> u32 #foreign sdl "SDL_GetWindowFlags";
+SdlSetResizable :: (window: *void, resizable: s32) #foreign sdl "SDL_SetWindowResizable";
 SdlLogicalSize :: (renderer: *void, width: s32, height: s32) -> s32 #foreign sdl "SDL_RenderSetLogicalSize";
 SdlSurfaceFrom :: (pixels: *void, width: s32, height: s32, depth: s32, pitch: s32, format: u32) -> *void #foreign sdl "SDL_CreateRGBSurfaceWithFormatFrom";
 SdlFreeSurface :: (surface: *void) #foreign sdl "SDL_FreeSurface";
@@ -803,6 +804,24 @@ ToggleFullscreen :: () {
     if SdlSetFullscreen(window, cast(u32)FULLSCREEN_DESKTOP) != 0 { return }
     logical_width = width; logical_height = height
     unused SdlLogicalSize(renderer, width, height)
+}
+
+// Window flags after InitWindow; FLAG_WINDOW_RESIZABLE is the one that
+// changes an open window.
+SetWindowState :: (flags: u32) {
+    config_flags |= flags
+    if window != null && (flags & cast(u32)FLAG_WINDOW_RESIZABLE) != cast(u32)0 { SdlSetResizable(window, 1) }
+}
+
+ClearWindowState :: (flags: u32) {
+    config_flags &= ~flags
+    if window != null && (flags & cast(u32)FLAG_WINDOW_RESIZABLE) != cast(u32)0 { SdlSetResizable(window, 0) }
+}
+
+IsWindowState :: (flag: u32) -> bool {
+    if window == null { return false }
+    if flag == cast(u32)FLAG_WINDOW_RESIZABLE { return (SdlWindowFlags(window) & cast(u32)0x20) != cast(u32)0 }
+    return (config_flags & flag) == flag
 }
 
 IsWindowFullscreen :: () -> bool {

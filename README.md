@@ -29,7 +29,8 @@ replayed runs (SDL's `offscreen` or `dummy` video driver needs no display).
 Gamepads use raylib's button and axis numbering (`GAMEPAD_BUTTON_*`,
 `GAMEPAD_AXIS_*`) over SDL's game controllers. `ToggleFullscreen` scales the
 game to the screen at its own size, so `GetScreenWidth` and mouse positions
-keep the window's coordinates. `LoadImageFromMemory` reads PNG bytes; other
+keep the window's coordinates. `SetWindowState(FLAG_WINDOW_RESIZABLE)` makes an
+open window resizable. `LoadImageFromMemory` reads PNG bytes; other
 formats load from files with `LoadImage`.
 Run `ziran update` to refresh all packages, or `ziran update Game2D` to refresh
 Game2D and its transitive Kryon dependency.

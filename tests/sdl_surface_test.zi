@@ -312,6 +312,11 @@ Pictures :: (picture: string) -> s32 {
 // Fullscreen keeps the game's size; no gamepad answers for a missing pad.
 WindowAndPads :: () -> s32 {
     if IsWindowFullscreen() { return 100 }
+    if IsWindowState(FLAG_WINDOW_RESIZABLE) { return 106 }
+    SetWindowState(FLAG_WINDOW_RESIZABLE)
+    if !IsWindowState(FLAG_WINDOW_RESIZABLE) { return 107 }
+    ClearWindowState(FLAG_WINDOW_RESIZABLE)
+    if IsWindowState(FLAG_WINDOW_RESIZABLE) { return 108 }
     ToggleFullscreen()
     Frame()
     if !IsWindowFullscreen() || GetScreenWidth() != 200 || GetScreenHeight() != 160 { return 101 }

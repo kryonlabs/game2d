@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- `Game2D/Sdl` reads gamepads (`IsGamepadAvailable`, `IsGamepadButtonDown`, `IsGamepadButtonPressed`, `GetGamepadAxisMovement`), toggles a fullscreen that scales the game at its own size, sets the window icon, and loads pictures (`LoadImage`, PNG bytes with `LoadImageFromMemory`, `GenImageColor`) and music from bytes (`LoadMusicStreamFromMemory`).
+- `Game2D/Sdl` reads gamepads (`IsGamepadAvailable`, `IsGamepadButtonDown`, `IsGamepadButtonPressed`, `GetGamepadAxisMovement`), toggles a fullscreen that scales the game at its own size, sets the window icon and its resizable state (`SetWindowState`), and loads pictures (`LoadImage`, PNG bytes with `LoadImageFromMemory`, `GenImageColor`) and music from bytes (`LoadMusicStreamFromMemory`).
 
 - `Game2D/Sdl` replaces `Raylib` and `RaylibNull`: games open an SDL2 window drawn by SDL's renderer, with the same window, drawing, texture, render-target, text, input, timing and audio calls, on Kryon's picture decoding and text and Ziran's core audio. `SetFixedFrameTime` steps headless runs deterministically. Games that ship Ogg Vorbis or MP3 import `std/audio_decode_vorbis` or `std/audio_decode_mp3` and link that codec.
 
