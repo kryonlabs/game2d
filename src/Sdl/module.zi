@@ -11,9 +11,18 @@
 #import "std/byte_text_linux"
 using Geometry :: #import "kryon/geometry";
 using Drawing :: #import "kryon/drawing_props";
-Pixels :: #import "kryon/image_pixels";
+// In the browser (an Emscripten build with PLATFORM_WEB) pictures are PNG
+// files decoded here, text draws on the page's canvas, the browser paces
+// frames and audio plays through WebAudio once the player has interacted.
+#if OS == .WEB || #defined(PLATFORM_WEB) {
+    GAME2D_WEB :: 1;
+} else {
+    GAME2D_WEB :: 0;
+    Pixels :: #import "kryon/image_pixels";
+}
 Lettering :: #import "sdl_text";
 Png :: #import "std/png_linux";
+Pictures :: #import "std/image";
 Audio :: #import "std/audio";
 Sink :: #import "std/audio_sink";
 WavFile :: #import "std/audio_wav";
@@ -466,7 +475,7 @@ PollEvents :: () {
             key := KeyOf(key_event.sym)
             if key > 0 && key < 512 {
                 down := event.kind == cast(u32)0x300
-                if down && key_event.repeated == cast(u8)0 && !keys_down[key] { keys_pressed[key] = true }
+                if down && key_event.repeated == cast(u8)0 && !keys_down[key] { keys_pressed[key] = true; Interacted() }
                 keys_down[key] = down
                 if down && exit_key != 0 && key == exit_key { should_close = true }
             }
@@ -481,7 +490,7 @@ PollEvents :: () {
             mouse = .{cast(float32)press.x, cast(float32)press.y}
             if button >= 0 {
                 down := event.kind == cast(u32)0x401
-                if down && !buttons_down[button] { buttons_pressed[button] = true }
+                if down && !buttons_down[button] { buttons_pressed[button] = true; Interacted() }
                 buttons_down[button] = down
             }
         }
@@ -506,6 +515,26 @@ PollEvents :: () {
         }
     }
     PadSample()
+}
+
+// Browsers start audio only after the player has interacted with the page.
+Interacted :: () {
+    #if OS == .WEB || #defined(PLATFORM_WEB) {
+        if audio_open { unused Sink.AudioSinkResume() }
+    }
+}
+
+// A picture file as straight RGBA: PNG in the browser, any format Kryon
+// decodes elsewhere. The caller frees its pixels.
+DecodePicture :: (path: string) -> Pictures.Image {
+    #if OS == .WEB || #defined(PLATFORM_WEB) {
+        encoded: Vec(u8)
+        defer VecFree(encoded)
+        if !ReadFileInto(path, *encoded) || encoded.count == 0 { return .{} }
+        return Png.ReadPNG(encoded[:])
+    } else {
+        return Pixels.LoadImagePixels(path)
+    }
 }
 
 // The active 2D camera's view of a world point.
@@ -855,7 +884,7 @@ EndDrawing :: () {
         fixed_elapsed += cast(float64)fixed_frame
         frame_previous = SdlCounter()
     } else {
-        if target_fps > 0 {
+        if target_fps > 0 && GAME2D_WEB == 0 {
             deadline := frame_previous + time_frequency / cast(u64)target_fps
             now := SdlCounter()
             if now < deadline {
@@ -1036,10 +1065,10 @@ EmptyRenderTexture :: () -> RenderTexture2D { return .{0, EmptyTexture(), EmptyT
 
 FileExists :: (path: string) -> bool { return PathExists(path) }
 
-// A picture file in any format Kryon decodes.
+// A picture file in any format Kryon decodes (PNG in the browser).
 LoadTexture :: (path: string) -> Texture2D {
     if renderer == null { return EmptyTexture() }
-    picture := Pixels.LoadImagePixels(path)
+    picture := DecodePicture(path)
     defer VecFree(picture.pixels)
     if picture.width <= 0 || picture.height <= 0 || picture.pixels.count < cast(s64)picture.width * cast(s64)picture.height * 4 { return EmptyTexture() }
     handle := SdlCreateTexture(renderer, cast(u32)RGBA, ACCESS_STATIC, picture.width, picture.height)
@@ -1188,9 +1217,10 @@ GenImageColor :: (width: s32, height: s32, color: Color) -> PixelImage {
     return .{cast(*void)data, width, height, 1, 7}
 }
 
-// A picture file in any format Kryon decodes, as RGBA pixels the game owns.
+// A picture file in any format Kryon decodes (PNG in the browser), as RGBA
+// pixels the game owns.
 LoadImage :: (path: string) -> PixelImage {
-    picture := Pixels.LoadImagePixels(path)
+    picture := DecodePicture(path)
     defer VecFree(picture.pixels)
     return OwnedPixels(picture.width, picture.height, picture.pixels[:])
 }
@@ -1208,6 +1238,11 @@ LoadImageFromMemory :: (file_type: string, data: *u8, size: s32) -> PixelImage {
 // Audio, mixed by std/audio and played through the platform's output.
 InitAudioDevice :: () {
     if audio_open { return }
+    // The page's context opens at once and starts with the first input.
+    if GAME2D_WEB != 0 {
+        audio_open = Sink.AudioSinkOpen()
+        return
+    }
     frequency := SdlFrequency()
     deadline := SdlCounter() + frequency * cast(u64)2
     // The device opens in the background; wait briefly so games can ask

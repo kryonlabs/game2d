@@ -1,0 +1,99 @@
+// Game2D's text in the browser: the page's 2D canvas lays out and draws
+// white lettering in Liberation Sans (or the page's sans-serif), and its
+// pixels copy into the picture. A line of size N is about N pixels tall.
+// sdl_text selects it; the page links Ziran's web/ziran_web.js.
+#import "std/web"
+#import "std/format"
+#import "std/byte_text_linux"
+#import "std/vec"
+
+#scope_file
+canvas: s32;
+context: s32;
+// Pixels of font size for each pixel of line height, from one sample line.
+size_per_line: float64 = 1.0;
+
+Name :: (text: string) -> s32 { return WebName(text) }
+
+// The canvas font for about SIZE pixels a line.
+SetFont :: (size: s32) {
+    px := cast(s32)(cast(float64)size * size_per_line + 0.5)
+    if px < 1 { px = 1 }
+    font: Vec(u8)
+    defer VecFree(font)
+    BuilderPrint(*font, "%px \"Liberation Sans\", Arial, sans-serif", px)
+    WebSet(context, Name("font"), WebText(TextView(font[:])))
+}
+
+// VALUE's width and line height, and how far its baseline sits below the
+// top, at the current font.
+Metrics :: (value: string) -> (width: float64, height: float64, ascent: float64) {
+    measured := WebAsObject(WebCall1(context, Name("measureText"), WebText(value)))
+    if measured == 0 { return 0.0, 0.0, 0.0 }
+    width := WebGetNumber(measured, Name("width"))
+    ascent := WebGetNumber(measured, Name("fontBoundingBoxAscent"))
+    descent := WebGetNumber(measured, Name("fontBoundingBoxDescent"))
+    return width, ascent + descent, ascent
+}
+
+#scope_export
+// Opens the canvas with the first text; false outside a page.
+TextOpen :: () -> bool {
+    if context != 0 { return true }
+    mark := WebScope()
+    defer WebEnd(mark)
+    document := WebGetObject(1, Name("document"))
+    if document == 0 { return false }
+    element := WebAsObject(WebCall1(document, Name("createElement"), WebText("canvas")))
+    if element == 0 { return false }
+    drawing := WebAsObject(WebCall1(element, Name("getContext"), WebText("2d")))
+    if drawing == 0 { return false }
+    canvas = WebKeep(element)
+    context = WebKeep(drawing)
+    size_per_line = 1.0
+    SetFont(100)
+    width, height, ascent := Metrics("Mg")
+    if height > 0.0 { size_per_line = 100.0 / height }
+    return true
+}
+
+TextClose :: () {
+    if context != 0 { WebRelease(context) }
+    if canvas != 0 { WebRelease(canvas) }
+    context = 0; canvas = 0
+}
+
+// VALUE's width and line height at SIZE in pixels; 0 when it cannot be laid out.
+TextMeasure :: (value: string, size: s32) -> (width: s32, height: s32) {
+    if size <= 0 || !TextOpen() { return 0, 0 }
+    mark := WebScope()
+    defer WebEnd(mark)
+    SetFont(size)
+    width, height, ascent := Metrics(value)
+    return cast(s32)(width + 0.999), cast(s32)(height + 0.999)
+}
+
+// White lettering of VALUE on a transparent WIDTH by HEIGHT picture of
+// straight RGBA, from its top left.
+TextPixels :: (value: string, size: s32, width: s32, height: s32, pixels: []u8) -> bool {
+    if width <= 0 || height <= 0 || pixels.count < cast(s64)width * cast(s64)height * 4 { return false }
+    if !TextOpen() { return false }
+    mark := WebScope()
+    defer WebEnd(mark)
+    // Resizing clears the canvas and resets its drawing state.
+    WebSet(canvas, Name("width"), WebNumber(cast(float64)width))
+    WebSet(canvas, Name("height"), WebNumber(cast(float64)height))
+    SetFont(size)
+    measured_width, line, ascent := Metrics(value)
+    WebSet(context, Name("fillStyle"), WebText("#ffffff"))
+    WebSet(context, Name("textBaseline"), WebText("alphabetic"))
+    unused WebCall3(context, Name("fillText"), WebText(value), WebNumber(0.0), WebNumber(ascent))
+    image := WebAsObject(WebCall4(context, Name("getImageData"), WebNumber(0.0), WebNumber(0.0),
+        WebNumber(cast(float64)width), WebNumber(cast(float64)height)))
+    if image == 0 { return false }
+    data := WebGetObject(image, Name("data"))
+    if data == 0 { return false }
+    count := cast(s32)(cast(s64)width * cast(s64)height * 4)
+    if WebCopyOut(data, cast(*void)*pixels[0], count) != count { return false }
+    return true
+}

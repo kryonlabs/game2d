@@ -32,7 +32,14 @@ Gamepads use raylib's button and axis numbering (`GAMEPAD_BUTTON_*`,
 `GAMEPAD_AXIS_*`) over SDL's game controllers. `ToggleFullscreen` scales the
 game to the screen at its own size, so `GetScreenWidth` and mouse positions
 keep the window's coordinates. `SetWindowState(FLAG_WINDOW_RESIZABLE)` makes an
-open window resizable. `LoadImageFromMemory` reads PNG bytes; other
+open window resizable.
+
+The same module builds for the browser with Emscripten: compile the game's
+generated C with `--define PLATFORM_WEB` and link with `-sUSE_SDL=2
+-sUSE_ZLIB=1` (plus `-sUSE_OGG=1 -sUSE_VORBIS=1` for Ogg music) and
+`--js-library` Ziran's `web/ziran_web.js`. There pictures are PNG files, text
+draws on the page's canvas, the browser paces frames, and audio plays through
+WebAudio once the player has pressed a key or button. `LoadImageFromMemory` reads PNG bytes; other
 formats load from files with `LoadImage`.
 Run `ziran update` to refresh all packages, or `ziran update Game2D` to refresh
 Game2D and its transitive Kryon dependency.
