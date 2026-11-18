@@ -1,0 +1,29 @@
+// Game2D's FreeType text, which Windows and Android builds use, checked on
+// Linux: lines about as tall as their size, wider text for more letters, and
+// white lettering that covers pixels.
+Text :: #import "sdl_text_freetype";
+#import "std/vec"
+#import "std/format"
+
+main :: () -> s32 {
+    if !Text.TextOpen() { print("FreeType text: no font\n"); return 1 }
+    defer Text.TextClose()
+    short_width, short_height := Text.TextMeasure("Hi", 20)
+    long_width, long_height := Text.TextMeasure("Hi there", 20)
+    if short_width <= 0 || long_width <= short_width { return 2 }
+    if short_height < 16 || short_height > 24 || long_height != short_height { return 3 }
+    big_width, big_height := Text.TextMeasure("Hi", 40)
+    if big_height < 32 || big_height > 48 || big_width <= short_width { return 4 }
+    pixels: Vec(u8)
+    defer VecFree(pixels)
+    if !VecResize(pixels, cast(s64)long_width * cast(s64)long_height * 4) { return 5 }
+    if !Text.TextPixels("Hi there", 20, long_width, long_height, pixels[:]) { return 6 }
+    covered := 0
+    for index: cast(s64)0..cast(s64)long_width * cast(s64)long_height - 1 {
+        if pixels[index * 4] != 255 || pixels[index * 4 + 1] != 255 || pixels[index * 4 + 2] != 255 { return 7 }
+        if pixels[index * 4 + 3] > 128 { covered += 1 }
+    }
+    if covered < 40 { print("FreeType text: % pixels covered\n", covered); return 8 }
+    print("Game2D FreeType text: measured % by % and drew % covered pixels\n", long_width, long_height, covered)
+    return 0
+}

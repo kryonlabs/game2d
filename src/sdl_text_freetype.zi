@@ -1,0 +1,283 @@
+// Game2D's text where Pango is not at hand (Windows, Android): FreeType
+// renders white lettering in the system's sans-serif face, or the font file
+// GAME2D_FONT names. A line of size N is about N pixels tall. sdl_text
+// selects it; the game links FreeType.
+#import "std/c_string"
+Utf8 :: #import "std/utf8";
+
+#scope_file
+freetype :: #system_library "freetype";
+libc :: #system_library "c";
+Getenv :: (name: *u8) -> *u8 #foreign libc "getenv";
+
+// FreeType's records up to the fields read here. FT_Long, FT_Pos and
+// FT_Fixed are C long: 32 bits on Windows, pointer-sized elsewhere.
+#if OS == .WINDOWS {
+Vector :: struct {
+    x: s32
+    y: s32
+}
+Metrics :: struct {
+    width: s32
+    height: s32
+    hori_bearing_x: s32
+    hori_bearing_y: s32
+    hori_advance: s32
+    vert_bearing_x: s32
+    vert_bearing_y: s32
+    vert_advance: s32
+}
+SizeMetrics :: struct {
+    x_ppem: u16
+    y_ppem: u16
+    x_scale: s32
+    y_scale: s32
+    ascender: s32
+    descender: s32
+    height: s32
+    max_advance: s32
+}
+FaceHead :: struct {
+    num_faces: s32
+    face_index: s32
+    face_flags: s32
+    style_flags: s32
+    num_glyphs: s32
+}
+BBox :: struct {
+    x_min: s32
+    y_min: s32
+    x_max: s32
+    y_max: s32
+}
+LoadChar :: (face: *void, code: u32, flags: s32) -> s32 #foreign freetype "FT_Load_Char";
+NewFace :: (library: *void, path: *u8, index: s32, face: **void) -> s32 #foreign freetype "FT_New_Face";
+Code :: (value: u32) -> u32 { return value }
+} else {
+Vector :: struct {
+    x: isize
+    y: isize
+}
+Metrics :: struct {
+    width: isize
+    height: isize
+    hori_bearing_x: isize
+    hori_bearing_y: isize
+    hori_advance: isize
+    vert_bearing_x: isize
+    vert_bearing_y: isize
+    vert_advance: isize
+}
+SizeMetrics :: struct {
+    x_ppem: u16
+    y_ppem: u16
+    x_scale: isize
+    y_scale: isize
+    ascender: isize
+    descender: isize
+    height: isize
+    max_advance: isize
+}
+FaceHead :: struct {
+    num_faces: isize
+    face_index: isize
+    face_flags: isize
+    style_flags: isize
+    num_glyphs: isize
+}
+BBox :: struct {
+    x_min: isize
+    y_min: isize
+    x_max: isize
+    y_max: isize
+}
+LoadChar :: (face: *void, code: usize, flags: s32) -> s32 #foreign freetype "FT_Load_Char";
+NewFace :: (library: *void, path: *u8, index: isize, face: **void) -> s32 #foreign freetype "FT_New_Face";
+Code :: (value: u32) -> usize { return cast(usize)value }
+}
+Bitmap :: struct {
+    rows: u32
+    width: u32
+    pitch: s32
+    buffer: *u8
+    num_grays: u16
+    pixel_mode: u8
+    palette_mode: u8
+    palette: *void
+}
+GlyphSlot :: struct {
+    library: *void
+    face: *void
+    next: *void
+    glyph_index: u32
+    generic_data: *void
+    generic_finalizer: *void
+    metrics: Metrics
+    linear_hori_advance: Vector
+    advance: Vector
+    format: s32
+    bitmap: Bitmap
+    bitmap_left: s32
+    bitmap_top: s32
+}
+SizeRecord :: struct {
+    face: *void
+    generic_data: *void
+    generic_finalizer: *void
+    metrics: SizeMetrics
+}
+Face :: struct {
+    head: FaceHead
+    family_name: *u8
+    style_name: *u8
+    num_fixed_sizes: s32
+    available_sizes: *void
+    num_charmaps: s32
+    charmaps: *void
+    generic_data: *void
+    generic_finalizer: *void
+    bbox: BBox
+    units_per_em: u16
+    ascender: s16
+    descender: s16
+    height: s16
+    max_advance_width: s16
+    max_advance_height: s16
+    underline_position: s16
+    underline_thickness: s16
+    glyph: *GlyphSlot
+    size: *SizeRecord
+    charmap: *void
+}
+
+Init :: (library: **void) -> s32 #foreign freetype "FT_Init_FreeType";
+DoneFace :: (face: *void) -> s32 #foreign freetype "FT_Done_Face";
+Done :: (library: *void) -> s32 #foreign freetype "FT_Done_FreeType";
+PixelSizes :: (face: *void, width: u32, height: u32) -> s32 #foreign freetype "FT_Set_Pixel_Sizes";
+LOAD_RENDER :: 4;
+
+library: *void;
+face: *Face;
+// Pixels of size for each pixel of line height, from the face's own lines.
+size_per_line: float64 = 1.0;
+set_size: s32;
+
+// The font: GAME2D_FONT, else the platform's sans-serif face.
+OpenFace :: () -> bool {
+    candidates: [4][512]u8
+    count := 0
+    key: [16]u8
+    unused CopyCString("GAME2D_FONT", key[:])
+    named := Getenv(*key[0])
+    if named != null && named[0] != 0 {
+        at := 0
+        while at < 511 && named[at] != 0 { candidates[0][at] = named[at]; at += 1 }
+        candidates[0][at] = 0
+        count = 1
+    }
+    #if OS == .WINDOWS {
+        unused CopyCString("C:/Windows/Fonts/arial.ttf", candidates[count][:]); count += 1
+        unused CopyCString("C:/Windows/Fonts/segoeui.ttf", candidates[count][:]); count += 1
+    } else {
+        unused CopyCString("/system/fonts/Roboto-Regular.ttf", candidates[count][:]); count += 1
+        unused CopyCString("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", candidates[count][:]); count += 1
+    }
+    for index: 0..count - 1 {
+        opened: *void = null
+        if NewFace(library, *candidates[index][0], 0, *opened) == 0 && opened != null {
+            face = cast(*Face)opened
+            return true
+        }
+    }
+    return false
+}
+
+// Sets about SIZE pixels a line.
+SetSize :: (size: s32) -> bool {
+    pixels := cast(s32)(cast(float64)size * size_per_line + 0.5)
+    if pixels < 1 { pixels = 1 }
+    if pixels == set_size { return true }
+    if PixelSizes(cast(*void)face, 0, cast(u32)pixels) != 0 { return false }
+    set_size = pixels
+    return true
+}
+
+// The current size's line height and ascent in pixels.
+Lines :: () -> (height: s32, ascent: s32) {
+    if face.size == null { return set_size, set_size }
+    metrics := face.size.metrics
+    ascent := cast(s64)metrics.ascender
+    descent := cast(s64)metrics.descender
+    return cast(s32)((ascent - descent + 63) / 64), cast(s32)((ascent + 63) / 64)
+}
+
+#scope_export
+// Opens FreeType and the font with the first text; false without either.
+TextOpen :: () -> bool {
+    if face != null { return true }
+    if library == null && Init(*library) != 0 { library = null; return false }
+    if !OpenFace() { return false }
+    size_per_line = 1.0; set_size = 0
+    if !SetSize(100) { TextClose(); return false }
+    height, ascent := Lines()
+    if height > 0 { size_per_line = 100.0 / cast(float64)height }
+    return true
+}
+
+TextClose :: () {
+    if face != null { unused DoneFace(cast(*void)face) }
+    face = null
+    if library != null { unused Done(library) }
+    library = null
+    set_size = 0
+}
+
+// VALUE's width and line height at SIZE in pixels; 0 when it cannot be laid out.
+TextMeasure :: (value: string, size: s32) -> (width: s32, height: s32) {
+    if size <= 0 || !TextOpen() || !SetSize(size) { return 0, 0 }
+    pen: s64 = 0
+    at: s32 = 0
+    while at < cast(s32)value.count {
+        scalar := Utf8.Decode(value, at)
+        at = ifx scalar.after > at then scalar.after else at + 1
+        if LoadChar(cast(*void)face, Code(cast(u32)scalar.value), 0) == 0 { pen += cast(s64)face.glyph.advance.x }
+    }
+    height, ascent := Lines()
+    return cast(s32)((pen + 63) / 64), height
+}
+
+// White lettering of VALUE on a transparent WIDTH by HEIGHT picture of
+// straight RGBA, from its top left.
+TextPixels :: (value: string, size: s32, width: s32, height: s32, pixels: []u8) -> bool {
+    if width <= 0 || height <= 0 || pixels.count < cast(s64)width * cast(s64)height * 4 { return false }
+    if !TextOpen() || !SetSize(size) { return false }
+    for index: cast(s64)0..cast(s64)width * cast(s64)height - 1 {
+        pixels[index * 4] = 255; pixels[index * 4 + 1] = 255; pixels[index * 4 + 2] = 255
+        pixels[index * 4 + 3] = 0
+    }
+    line, ascent := Lines()
+    pen: s64 = 0
+    at: s32 = 0
+    while at < cast(s32)value.count {
+        scalar := Utf8.Decode(value, at)
+        at = ifx scalar.after > at then scalar.after else at + 1
+        if LoadChar(cast(*void)face, Code(cast(u32)scalar.value), LOAD_RENDER) != 0 { continue }
+        slot := face.glyph
+        bitmap := slot.bitmap
+        left := cast(s32)(pen / 64) + slot.bitmap_left
+        top := ascent - slot.bitmap_top
+        for row: cast(s32)0..cast(s32)bitmap.rows - 1 {
+            y := top + row
+            if y < 0 || y >= height { continue }
+            for column: cast(s32)0..cast(s32)bitmap.width - 1 {
+                x := left + column
+                if x < 0 || x >= width { continue }
+                coverage := bitmap.buffer[cast(s64)row * cast(s64)bitmap.pitch + cast(s64)column]
+                target := (cast(s64)y * cast(s64)width + cast(s64)x) * 4 + 3
+                if coverage > pixels[target] { pixels[target] = coverage }
+            }
+        }
+        pen += cast(s64)slot.advance.x
+    }
+    return true
+}

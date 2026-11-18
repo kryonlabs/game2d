@@ -27,5 +27,8 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 "$ziran" run --project build/game2d-behavior.zx
 
 sh tests/sdl_surface_test.sh
+LDLIBS="$(pkg-config --libs freetype2)" "$ziran" build --project $lock_flags --target=c --exe \
+    --entry sdl_text_freetype_test:main -o "$work/freetype" tests/sdl_text_freetype_test.zi
+"$work/freetype/sdl_text_freetype_test"
 sh tests/swipe_result_test.sh
 echo "Game2D local source, native, portable and SDL surface tests passed"

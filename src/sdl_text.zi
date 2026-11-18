@@ -1,8 +1,11 @@
 // Game2D's text: white lettering the Sdl module tints when it draws it, a
-// line of size N about N pixels tall. Pango and Cairo draw it on the
-// desktop, the page's canvas in the browser.
+// line of size N about N pixels tall. Pango and Cairo draw it on the Linux
+// desktop, the page's canvas in the browser, and FreeType on Windows and
+// Android.
 #if OS == .WEB || #defined(PLATFORM_WEB) {
     using Backend :: #import "sdl_text_web";
+} else #if OS == .WINDOWS || OS == .ANDROID || #defined(PLATFORM_ANDROID) || #defined(ANDROID_BUILD) {
+    using Backend :: #import "sdl_text_freetype";
 } else {
     using Backend :: #import "sdl_text_pango";
 }

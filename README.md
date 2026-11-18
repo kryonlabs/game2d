@@ -40,7 +40,10 @@ generated C with `--define PLATFORM_WEB` and link with `-sUSE_SDL=2
 `--js-library` Ziran's `web/ziran_web.js`. There pictures are PNG files (link
 with `--use-preload-plugins` so the browser decodes preloaded ones), text
 draws on the page's canvas, the browser paces frames, and audio plays through
-WebAudio once the player has pressed a key or button. `LoadImageFromMemory` reads PNG bytes; other
+WebAudio once the player has pressed a key or button.
+
+On Windows and Android the text draws with FreeType (link `-lfreetype`) in
+the system's sans-serif face, or the font file `GAME2D_FONT` names. `LoadImageFromMemory` reads PNG bytes; other
 formats load from files with `LoadImage`.
 Run `ziran update` to refresh all packages, or `ziran update Game2D` to refresh
 Game2D and its transitive Kryon dependency.
