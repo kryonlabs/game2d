@@ -52,8 +52,8 @@ Game2D and its transitive Kryon dependency.
 
 ```toml
 [dependencies.Game2D]
-git = "https://github.com/kryonlabs/game2d.git"
-ref = "master"
+git = "https://git.waozi.xyz/kryonlabs/game2d.git"
+ref = "417141f0283ebd2a93901b57fae868ac88e0689e"
 ```
 
 Import the shared module with `using Game :: #import "Game2D";`, and the window
