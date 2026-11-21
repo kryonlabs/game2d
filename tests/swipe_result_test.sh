@@ -40,32 +40,37 @@ run_portable "$work/navigation-ir.zx"
 # This is a consumer fixture, not a dependency checkout or copied library.
 compiler=$("$ziran" pkg path ziran $lock_flags)
 kryon=$("$ziran" pkg path kryon $lock_flags)
-python3 - "$repo" "$work/consumer" "$compiler" "$kryon" <<'PY'
+python3 - "${GAME2D_TEST_PROVIDER_ROOT:-$repo}" "$repo" "$work/consumer" "$compiler" "$kryon" <<'PY'
 import json
 from pathlib import Path
+import subprocess
 import sys
-repo, consumer, compiler, kryon = map(Path, sys.argv[1:])
+provider, repo, consumer, compiler, kryon = map(Path, sys.argv[1:])
+
+def revision(path):
+    return subprocess.check_output(['git', '-C', path, 'rev-parse', 'HEAD'], text=True).strip()
+
 (consumer / 'src').mkdir(parents=True, exist_ok=True)
 source = (repo / 'tests/navigation_test.zi').read_text()
 for module in ('controls', 'navigation'):
     source = source.replace(f'#import "{module}"', f'#import "Game2D/{module}"')
 (consumer / 'src/navigation_test.zi').write_text(source)
-(consumer / 'ziran.toml').write_text('''[package]
+(consumer / 'ziran.toml').write_text(f'''[package]
 name = "swipe_consumer"
 module_roots = ["src"]
 [toolchain]
-git = "https://github.com/ziranlang/ziran.git"
-ref = "master"
+git = "https://git.waozi.xyz/ziranlang/ziran.git"
+ref = "{revision(compiler)}"
 [dependencies.Game2D]
-git = "https://github.com/kryonlabs/game2d.git"
-ref = "master"
+git = "https://git.waozi.xyz/kryonlabs/game2d.git"
+ref = "{revision(provider)}"
 [dependencies.kryon]
-git = "https://github.com/kryonlabs/kryon.git"
-ref = "master"
+git = "https://git.waozi.xyz/kryonlabs/kryon.git"
+ref = "{revision(kryon)}"
 ''')
 (consumer / 'ziran.local.toml').write_text('[overrides]\n' + ''.join(
     f'{name} = {json.dumps(str(path))}\n' for name, path in
-    (('Game2D', repo), ('kryon', kryon), ('ziran', compiler))))
+    (('Game2D', provider), ('kryon', kryon), ('ziran', compiler))))
 PY
 cd "$work/consumer"
 "$ziran" lock --offline
