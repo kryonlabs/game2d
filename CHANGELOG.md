@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Build with Ziran 8133bd41 and Kryon a04a3ba1, the Kryon source Breeze, Apps, Entity, Plot, Game2D and CSS share.
 - `Game2D/Sdl` queues shapes and pictures that share a texture and blend mode and sends each run to SDL as one geometry call: Kasaival's frames went from about 4,500 SDL calls to a few dozen.
 - `Game2D/Sdl` no longer spins waiting for the target frame rate when vsync already presents at that rate.
 
