@@ -22,7 +22,7 @@ make test    # package tests
 
 ## Pins and links
 
-- Ziran toolchain: `8133bd41ef171e03ce4557b55122eb739548eb72`
+- Ziran toolchain: `2523610f6ddda44ab81b383b211333330d3fe64c`
 - Kryon: `d97c19e86d0570b111ce0cd5548d1041ebdd08e9`
 - `Sdl` links `sdl2 zlib cairo pangocairo glib-2.0`; games add only the audio
 decoders they ship (`std/audio_decode_vorbis`, `std/audio_decode_mp3`).

@@ -124,8 +124,8 @@
     "name": "Game2D"
   },
   "toolchain": {
-    "commit": "8133bd41ef171e03ce4557b55122eb739548eb72",
-    "ref": "8133bd41ef171e03ce4557b55122eb739548eb72",
+    "commit": "2523610f6ddda44ab81b383b211333330d3fe64c",
+    "ref": "2523610f6ddda44ab81b383b211333330d3fe64c",
     "url": "https://git.waozi.xyz/ziranlang/ziran.git"
   }
 }
