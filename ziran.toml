@@ -8,7 +8,7 @@ ref = "8133bd41ef171e03ce4557b55122eb739548eb72"
 
 [dependencies.kryon]
 git = "https://git.waozi.xyz/kryonlabs/kryon.git"
-ref = "a04a3ba1982ce5ca1337f5cf8695345fdcb30553"
+ref = "d97c19e86d0570b111ce0cd5548d1041ebdd08e9"
 
 [exports]
 Game2D = "src/Game2D/module.zi"
