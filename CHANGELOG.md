@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Pin Ziran ba28d7c0 and Kryon ad43e92a so applications share the fixed GPU skinning and native program entry paths.
+
 - Build with Ziran 8133bd41 and Kryon d97c19e8, the Kryon source Breeze, Apps, Entity, Plot, Game2D and CSS share.
 - `Game2D/Sdl` queues shapes and pictures that share a texture and blend mode and sends each run to SDL as one geometry call: Kasaival's frames went from about 4,500 SDL calls to a few dozen.
 - `Game2D/Sdl` no longer spins waiting for the target frame rate when vsync already presents at that rate.
