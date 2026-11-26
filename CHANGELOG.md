@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Share the Kryon revision that fixes GPU seams in rounded fills.
+
 - Pin Ziran ba28d7c0 and Kryon 6a41ba74 so applications share the fixed GPU skinning, native entry, web scene compilation and hosted package naming paths.
 
 - Build with Ziran 8133bd41 and Kryon d97c19e8, the Kryon source Breeze, Apps, Entity, Plot, Game2D and CSS share.
