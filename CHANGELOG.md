@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Share published Ziran edd7f35a and Kryon 7fc37d68 with native app hosts.
+
 - Share the Kryon revision that fixes GPU seams in rounded fills.
 
 - Pin Ziran ba28d7c0 and Kryon 6a41ba74 so applications share the fixed GPU skinning, native entry, web scene compilation and hosted package naming paths.
