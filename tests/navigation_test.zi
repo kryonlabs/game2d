@@ -115,31 +115,33 @@ main :: () -> s32 {
         "commits the held paint frame") { return 1 }
     paint_count := Paint.PendingPaintCount(session)
     if !Expect(paint_count == 6, "draws backing, rim and outlined markers") { return 1 }
-    rim := Paint.PendingPaintAt(session, 0)
-    backing := Paint.PendingPaintAt(session, 1)
-    pip := Paint.PendingPaintAt(session, 2)
-    pip_center := Paint.PendingPaintAt(session, 3)
-    finger := Paint.PendingPaintAt(session, 4)
-    finger_center := Paint.PendingPaintAt(session, 5)
-    rim_thickness := (rim.bounds.width - backing.bounds.width) * .5
-    if !Expect(rim.bounds.width == 80.0 && rim_thickness == 3.0,
-        "uses a larger ring with a thick rim") { return 1 }
-    if !Expect(Brightness(backing.color.r, backing.color.g, backing.color.b) < .25 &&
-        Brightness(rim.color.r, rim.color.g, rim.color.b) > .80 &&
-        backing.color.a > 200 && rim.color.a > 230,
-        "backing keeps a strong contrast with the rim") { return 1 }
-    if !Expect(finger.bounds.width >= 24.0 && pip.bounds.width >= 20.0,
-        "markers are large enough to see") { return 1 }
-    if !Expect(Brightness(finger_center.color.r, finger_center.color.g, finger_center.color.b) < .25 &&
-        Brightness(pip_center.color.r, pip_center.color.g, pip_center.color.b) < .25 &&
-        Brightness(finger.color.r, finger.color.g, finger.color.b) > .80 &&
-        Brightness(pip.color.r, pip.color.g, pip.color.b) > .80,
-        "markers keep dark centers and bright outlines") { return 1 }
-    if !Expect(rim.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill &&
-        backing.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill &&
-        finger.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill &&
-        finger_center.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill,
-        "paint commands are layered filled circles") { return 1 }
+    {
+        rim := Paint.PendingPaintAt(session, 0)
+        backing := Paint.PendingPaintAt(session, 1)
+        pip := Paint.PendingPaintAt(session, 2)
+        pip_center := Paint.PendingPaintAt(session, 3)
+        finger := Paint.PendingPaintAt(session, 4)
+        finger_center := Paint.PendingPaintAt(session, 5)
+        rim_thickness := (rim.bounds.width - backing.bounds.width) * .5
+        if !Expect(rim.bounds.width == 80.0 && rim_thickness == 3.0,
+            "uses a larger ring with a thick rim") { return 1 }
+        if !Expect(Brightness(backing.color.r, backing.color.g, backing.color.b) < .25 &&
+            Brightness(rim.color.r, rim.color.g, rim.color.b) > .80 &&
+            backing.color.a > 200 && rim.color.a > 230,
+            "backing keeps a strong contrast with the rim") { return 1 }
+        if !Expect(finger.bounds.width >= 24.0 && pip.bounds.width >= 20.0,
+            "markers are large enough to see") { return 1 }
+        if !Expect(Brightness(finger_center.color.r, finger_center.color.g, finger_center.color.b) < .25 &&
+            Brightness(pip_center.color.r, pip_center.color.g, pip_center.color.b) < .25 &&
+            Brightness(finger.color.r, finger.color.g, finger.color.b) > .80 &&
+            Brightness(pip.color.r, pip.color.g, pip.color.b) > .80,
+            "markers keep dark centers and bright outlines") { return 1 }
+        if !Expect(rim.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill &&
+            backing.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill &&
+            finger.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill &&
+            finger_center.kind == cast(s32)Paint.PaintKind.PaintKindRoundedFill,
+            "paint commands are layered filled circles") { return 1 }
+    }
     Paint.PaintClear(session)
     unused GameStickSteer(*render_stick, false, 138.0, 144.0)
     released_status := BeginFrame(session, cast(u64)1, Rectangle.{0.0, 0.0, 400.0, 400.0})

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Pin Ziran e265c54e and Kryon f4bda473 so game hosts keep one Kryon in the graph with typed TSX controls.
+
 - Share published Ziran dc3ecf0a and Kryon e2b0fbd8 with native app hosts.
 
 - Expose ControlsChoice, StickIndicator and SwipePreview through Game2D/tsx/controls; keep their native implementations package-private and preserve game state, geometry and interaction results.
