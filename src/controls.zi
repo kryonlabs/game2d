@@ -6,6 +6,10 @@ Box :: #import "kryon/box";
 Button :: #import "kryon/button";
 Text :: #import "kryon/text";
 DirectionPad :: #import "kryon/direction_pad";
+BoxComponent :: #import "kryon/tsx/box";
+ButtonComponent :: #import "kryon/tsx/button";
+TextComponent :: #import "kryon/tsx/text";
+DirectionPadComponent :: #import "kryon/tsx/direction_pad";
 #import "kryon/drawing_props"
 #import "kryon/control_props"
 #import "kryon/text_align"
@@ -107,6 +111,15 @@ GameStickIndicatorPlace :: (state: GameStick, heading_x: float32, heading_y: flo
     }
     return layout
 }
+GameStickIndicatorProps :: struct {
+    key: u64
+    state: GameStick
+    heading_x: float32
+    heading_y: float32
+    // Zero selects the default 40-pixel radius.
+    radius: float32
+}
+#scope_package
 // Draws GameStickIndicatorPlace's layout over the play area while a press
 // is held, so a player sees where the touch steers.
 GameStickIndicator :: (session: Session, key: u64, state: GameStick, heading_x: float32,
@@ -119,25 +132,26 @@ GameStickIndicatorPaint :: (session: Session, key: u64, layout: GameStickIndicat
     edge: float32 = 3.0
     rim := Rectangle.{layout.ring.x + edge, layout.ring.y + edge,
         layout.ring.width - edge * 2.0, layout.ring.height - edge * 2.0}
-    unused Box.Draw(session, Box.Props.{.key = key, .bounds = layout.ring,
-        .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.ring.width * .5})
-    unused Box.Draw(session, Box.Props.{.key = key + 1, .bounds = rim,
-        .fill = ColorFromPacked(0x081d29d8), .radius = rim.width * .5})
+    unused BoxComponent.Box(.{.session = session, .props = Box.Props.{.key = key, .bounds = layout.ring,
+        .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.ring.width * .5}})
+    unused BoxComponent.Box(.{.session = session, .props = Box.Props.{.key = key + 1, .bounds = rim,
+        .fill = ColorFromPacked(0x081d29d8), .radius = rim.width * .5}})
     if layout.pip.width > 0.0 {
         pip_inner := Rectangle.{layout.pip.x + edge * .5, layout.pip.y + edge * .5,
             layout.pip.width - edge, layout.pip.height - edge}
-        unused Box.Draw(session, Box.Props.{.key = key + 2, .bounds = layout.pip,
-            .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.pip.width * .5})
-        unused Box.Draw(session, Box.Props.{.key = key + 3, .bounds = pip_inner,
-            .fill = ColorFromPacked(0x081d29e6), .radius = pip_inner.width * .5})
+        unused BoxComponent.Box(.{.session = session, .props = Box.Props.{.key = key + 2, .bounds = layout.pip,
+            .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.pip.width * .5}})
+        unused BoxComponent.Box(.{.session = session, .props = Box.Props.{.key = key + 3, .bounds = pip_inner,
+            .fill = ColorFromPacked(0x081d29e6), .radius = pip_inner.width * .5}})
     }
     finger_inner := Rectangle.{layout.finger.x + edge * .5, layout.finger.y + edge * .5,
         layout.finger.width - edge, layout.finger.height - edge}
-    unused Box.Draw(session, Box.Props.{.key = key + 4, .bounds = layout.finger,
-        .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.finger.width * .5})
-    unused Box.Draw(session, Box.Props.{.key = key + 5, .bounds = finger_inner,
-        .fill = ColorFromPacked(0x081d29e6), .radius = finger_inner.width * .5})
+    unused BoxComponent.Box(.{.session = session, .props = Box.Props.{.key = key + 4, .bounds = layout.finger,
+        .fill = ColorFromPacked(0x8ff6fff2), .radius = layout.finger.width * .5}})
+    unused BoxComponent.Box(.{.session = session, .props = Box.Props.{.key = key + 5, .bounds = finger_inner,
+        .fill = ColorFromPacked(0x081d29e6), .radius = finger_inner.width * .5}})
 }
+#scope_export
 GameControlsProps :: struct {
     key: u64
     bounds: Rectangle
@@ -163,6 +177,12 @@ GameSwipePreviewPlace :: (bounds: Rectangle, now: float64) -> GameStickIndicator
     state.y = center_y + heading_y * radius * .62
     return GameStickIndicatorPlace(state, heading_x, heading_y, radius)
 }
+GameSwipePreviewProps :: struct {
+    key: u64
+    bounds: Rectangle
+    now: float64
+}
+#scope_package
 GameSwipePreview :: (session: Session, key: u64, bounds: Rectangle, now: float64) {
     layout := GameSwipePreviewPlace(bounds, now)
     if !layout.visible { return }
@@ -177,35 +197,35 @@ GameControlsChoice :: (session: Session, props: GameControlsProps) -> s32 {
     if height > 360.0 { height = 360.0 }
     card := Rectangle.{props.bounds.x + (props.bounds.width - width) * .5,
         props.bounds.y + (props.bounds.height - height) * .5, width, height}
-    unused Box.Draw(session, Box.Props.{.key = props.key, .bounds = card,
-        .fill = ColorFromPacked(0x112a3bee), .border = ColorFromPacked(0x80cbd8ff), .radius = 24.0})
-    unused Text.Draw(session, Text.Props.{.key = props.key + 1, .text = props.title,
+    unused BoxComponent.Box(.{.session = session, .props = Box.Props.{.key = props.key, .bounds = card,
+        .fill = ColorFromPacked(0x112a3bee), .border = ColorFromPacked(0x80cbd8ff), .radius = 24.0}})
+    unused TextComponent.Text(.{.session = session, .props = Text.Props.{.key = props.key + 1, .text = props.title,
         .bounds = Rectangle.{card.x + 16.0, card.y + 18.0, width - 32.0, 36.0},
-        .size = 23, .align = TextAlign.TextAlignCenter})
+        .size = 23, .align = TextAlign.TextAlignCenter}})
     tile_width := (width - 48.0) * .5
     tile_height := height - 92.0
     for index: 0..1 {
         tile := Rectangle.{card.x + 16.0 + cast(float32)index * (tile_width + 16.0),
             card.y + 68.0, tile_width, tile_height}
-        unused Box.Draw(session, Box.Props.{.key = props.key + 2 + cast(u64)index, .bounds = tile,
-            .fill = ColorFromPacked(0x051922ee), .radius = 16.0})
+        unused BoxComponent.Box(.{.session = session, .props = Box.Props.{.key = props.key + 2 + cast(u64)index, .bounds = tile,
+            .fill = ColorFromPacked(0x051922ee), .radius = 16.0}})
         preview := Rectangle.{tile.x + 16.0, tile.y + 10.0, tile.width - 32.0, tile.height - 72.0}
         if index == 0 {
             GameSwipePreview(session, props.key + 4, preview, props.now)
-            if Button.Draw(session, Button.Props.{.key = props.key + 32,
+            if ButtonComponent.Button(.{.session = session, .props = Button.Props.{.key = props.key + 32,
                 .id = cast(s32)props.key + 32, .bounds = preview, .label = props.swipe_label,
-                .selected = props.selected == 0, .invisible = true}) != 0 { return 0 }
+                .selected = props.selected == 0, .invisible = true}}) { return 0 }
         } else {
-            pad := DirectionPad.Draw(session, DirectionPad.Props.{.key = props.key + 10,
-                .bounds = preview, .label = props.pad_label, .now = props.now})
+            pad := DirectionPadComponent.DirectionPad(.{.session = session, .props = DirectionPad.Props.{.key = props.key + 10,
+                .bounds = preview, .label = props.pad_label, .now = props.now}})
             if pad.step { return 1 }
         }
-        if Button.Draw(session, Button.Props.{.key = props.key + 30 + cast(u64)index,
+        if ButtonComponent.Button(.{.session = session, .props = Button.Props.{.key = props.key + 30 + cast(u64)index,
             .id = cast(s32)props.key + 30 + cast(s32)index,
             .bounds = Rectangle.{tile.x + 8.0, tile.y + tile.height - 56.0, tile.width - 16.0, 44.0},
             .label = ifx index == 0 then props.swipe_label else props.pad_label,
             .selected = props.selected == index,
-            .emphasis = ButtonEmphasis.ButtonEmphasisFilled}) != 0 { return cast(s32)index }
+            .emphasis = ButtonEmphasis.ButtonEmphasisFilled}}) { return cast(s32)index }
     }
     return -1
 }

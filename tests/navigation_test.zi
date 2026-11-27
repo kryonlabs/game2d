@@ -6,6 +6,7 @@
 Paint :: #import "kryon/paint_queue"
 #import "navigation"
 #import "controls"
+ControlComponents :: #import "Game2D/tsx/controls";
 using FrameStatus;
 Expect :: (ok: bool, message: string) -> bool {
     if !ok { print("Game2D local test failed: %\n", message) }
@@ -108,7 +109,8 @@ main :: () -> s32 {
     held_status := BeginFrame(session, cast(u64)1, Rectangle.{0.0, 0.0, 400.0, 400.0})
     if !Expect(held_status == cast(FrameStatus)FrameOk,
         "begins a headless paint frame") { return 1 }
-    GameStickIndicator(session, cast(u64)52020, render_stick, held.x, held.y)
+    ControlComponents.StickIndicator(.{.session = session, .props = GameStickIndicatorProps.{
+        .key = cast(u64)52020, .state = render_stick, .heading_x = held.x, .heading_y = held.y}})
     if !Expect(CommitFrame(session) == cast(FrameStatus)FrameOk,
         "commits the held paint frame") { return 1 }
     paint_count := Paint.PendingPaintCount(session)
@@ -143,7 +145,8 @@ main :: () -> s32 {
     released_status := BeginFrame(session, cast(u64)1, Rectangle.{0.0, 0.0, 400.0, 400.0})
     if !Expect(released_status == cast(FrameStatus)FrameOk,
         "begins the released paint frame") { return 1 }
-    GameStickIndicator(session, cast(u64)52020, render_stick, held.x, held.y)
+    ControlComponents.StickIndicator(.{.session = session, .props = GameStickIndicatorProps.{
+        .key = cast(u64)52020, .state = render_stick, .heading_x = held.x, .heading_y = held.y}})
     if !Expect(CommitFrame(session) == cast(FrameStatus)FrameOk,
         "commits the released paint frame") { return 1 }
     if !Expect(Paint.PendingPaintCount(session) == 0, "release hides the indicator") { return 1 }

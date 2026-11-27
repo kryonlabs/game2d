@@ -11,12 +11,25 @@ games already use (`InitWindow`, `BeginDrawing`, `DrawTexturePro`,
 with Pango and Cairo, and audio mixes in Ziran's `std/audio`. Kryon keeps
 its UI geometry, drawing primitives and widgets.
 
-`game2d/navigation` owns the portable title/play/pause/settings/control-choice
-state machine. `game2d/controls` supplies `GameControlsChoice` and re-anchored
-`GameSwipeDirection` steering. The chooser uses Kryon's standard
-DirectionPad and buttons. Callers supply translated labels, persist their
+`Game2D/navigation` owns the portable title/play/pause/settings/control-choice
+state machine. `Game2D/controls` supplies checked control props, touch state and
+re-anchored `GameSwipeDirection` steering. Screens import `ControlsChoice`,
+`StickIndicator` and `SwipePreview` from `Game2D/tsx/controls`. These typed
+components use the native chooser and indicator implementations, which compose
+Kryon's real Box, Text, Button and DirectionPad widgets. Their native composition
+functions are package-private. Callers supply translated labels, persist their
 chosen mode, and retain their own game rules, title artwork and account actions.
 Neither module depends on a publisher, account service or game catalog.
+
+```tsx
+import { StickIndicator } from "Game2D/tsx/controls";
+import { GameStickIndicatorProps } from "Game2D/controls";
+import { Session } from "kryon/session";
+
+export function TouchFeedback(input: { session: Session; props: GameStickIndicatorProps }): void {
+    <StickIndicator session={input.session} props={input.props} />;
+}
+```
 
 `Sdl` links SDL2, zlib for PNG bytes and, for text, Pango and Cairo
 (`pkg-config --libs sdl2 zlib cairo pangocairo glib-2.0`). It does not bring in

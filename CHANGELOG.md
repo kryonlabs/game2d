@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- Share published Ziran edd7f35a and Kryon 7fc37d68 with native app hosts.
+- Share published Ziran dc3ecf0a and Kryon e2b0fbd8 with native app hosts.
+
+- Expose ControlsChoice, StickIndicator and SwipePreview through Game2D/tsx/controls; keep their native implementations package-private and preserve game state, geometry and interaction results.
 
 - Share the Kryon revision that fixes GPU seams in rounded fills.
 

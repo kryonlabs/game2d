@@ -52,7 +52,7 @@ def revision(path):
 
 (consumer / 'src').mkdir(parents=True, exist_ok=True)
 source = (repo / 'tests/navigation_test.zi').read_text()
-for module in ('controls', 'navigation'):
+for module in ('controls', 'navigation', 'tsx/controls'):
     source = source.replace(f'#import "{module}"', f'#import "Game2D/{module}"')
 (consumer / 'src/navigation_test.zi').write_text(source)
 (consumer / 'ziran.toml').write_text(f'''[package]
